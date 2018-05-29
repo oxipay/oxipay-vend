@@ -1,0 +1,12 @@
+version: '2'
+services:
+  db:
+    image: mariadb
+    env_file:
+      - ./mariadb.env
+    ports: 
+     - 3306
+    volumes: 
+      - vend-data:/var/lib/mysql
+volumes:
+    vend-data: 
