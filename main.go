@@ -3,12 +3,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
+	// "time"
+	"reflect"
 
 	shortid "github.com/ventu-io/go-shortid"
 )
@@ -22,6 +24,26 @@ const (
 	statusTimeout   = "TIMEOUT"
 	statusUnknown   = "UNKNOWN"
 )
+
+// Terminal terminal mapping
+type Terminal struct {
+	InternalRegisterID string // Oxipay registerid
+	InternalSignKey    string
+	Origin             string
+	VendRegisterID     string
+}
+
+// OxipayPayload Payload used to send to Oxipay
+type OxipayPayload struct {
+	MerchantID        string `json:"x_merchant_id"`
+	DeviceID          string `json:"x_device_id"`
+	OperatorID        string `json:"x_operator_id"`
+	FirmwareVersion   string `json:"x_firmware_version"`
+	PosTransactionRef string `json:"x_pos_transaction_ref"`
+	PreApprovalCode   int    `json:"x_pre_approval_code"`
+	FinanceAmount     int    `json:"x_finance_amount"`
+	PurchaseAmount    int    `json:"x_purchase_amount"`
+}
 
 func main() {
 	// We are hosting all of the content in ./assets, as the resources are
@@ -39,6 +61,7 @@ func main() {
 	}
 
 	log.Printf("Starting webserver on port %s", port)
+	log.Printf("here ++ ")
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
@@ -74,6 +97,8 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("RegisterID is %s ", registerID)
+
 	// If no outcome was specified, then just follow the happy transaction flow.
 	if outcome == "" {
 		outcome = statusAccepted
@@ -104,9 +129,29 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// seconds. In reality this step can take much longer as the buyer completes
 	// the terminal instruction, and the amount is sent to the processor for
 	// approval.
-	delay := 4 * time.Second
-	log.Printf("Waiting for %d seconds", delay/time.Second)
-	time.Sleep(delay)
+	// delay := 4 * time.Second
+	// log.Printf("Waiting for %d seconds", delay/time.Second)
+
+	// looks up the database to get the fake Oxipay terminal
+	// so that we can issue this against Oxipay
+	terminal, err := getRegisteredTerminal(origin)
+
+	if err != nil {
+		log.Printf("Using Oxipay register %s ", terminal.InternalRegisterID)
+	}
+
+	// send off to Oxipay
+	var oxipayPayload OxipayPayload = OxipayPayload{
+		DeviceID:        "foobar",
+		MerchantID:      "3342342",
+		FinanceAmount:   1000,
+		FirmwareVersion: "version 4.0",
+		OperatorID:      "John",
+		PurchaseAmount:  1000,
+		PreApprovalCode: 1234,
+	}
+
+	log.Println(oxipayPayload.generatePayload())
 
 	// We build a JSON response object that contains important information for
 	// which step we should send back to Vend to guide the payment flow.
@@ -161,4 +206,38 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// https://tools.ietf.org/html/rfc7231#section-6.3.2
 	w.WriteHeader(http.StatusCreated)
 	w.Write(responseJSON)
+}
+
+func validateRequest() {
+
+}
+
+func getRegisteredTerminal(origin string) (Terminal, error) {
+	// @ToDo query from database
+	return Terminal{
+		InternalRegisterID: "2341341",
+		InternalSignKey:    "asdkjfhasdfasdf",
+		Origin:             "foo.com",
+		VendRegisterID:     "registerfoo",
+	}, nil
+}
+
+func (payload *OxipayPayload) generatePayload() string {
+
+	x := reflect.ValueOf(payload)
+
+	values := make([]interface{}, x.NumField())
+
+	var ret string
+
+	for element := range values {
+		ret = fmt.Sprintf("element is %v", element)
+		fmt.Println(ret)
+	}
+	return ""
+}
+
+func signMessage(plainText string, signingKey string) string {
+
+	return ""
 }
