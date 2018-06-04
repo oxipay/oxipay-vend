@@ -9,9 +9,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	// "time"
+	// "time"s
+	"database/sql"
 	"reflect"
 
+	_ "github.com/go-sql-driver/mysql"
 	shortid "github.com/ventu-io/go-shortid"
 )
 
@@ -45,7 +47,36 @@ type OxipayPayload struct {
 	PurchaseAmount    int    `json:"x_purchase_amount"`
 }
 
+var db *sql.DB
+
 func main() {
+
+	// @todo pull from config
+	dbUser := "root"
+	dbPassword := ""
+	host := "172.18.0.2"
+	dbName := "vend"
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", dbUser, dbPassword, host, dbName)
+
+	log.Printf("Attempting to connect to %s \n", dsn)
+
+	// connect to the database
+	// @todo grab config
+	db, err := sql.Open("mysql", dsn)
+	//defer db.Close()
+
+	if err != nil {
+		log.Printf("Unable to connect")
+		log.Fatal(err)
+	}
+
+	log.Printf("Connected to Database")
+
+	// test to make sure it's all good
+	if err := db.Ping(); err != nil {
+		log.Fatal(err)
+	}
+
 	// We are hosting all of the content in ./assets, as the resources are
 	// required by the frontend.
 	fileServer := http.FileServer(http.Dir("assets"))
@@ -61,7 +92,6 @@ func main() {
 	}
 
 	log.Printf("Starting webserver on port %s", port)
-	log.Printf("here ++ ")
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
@@ -141,7 +171,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// send off to Oxipay
-	var oxipayPayload OxipayPayload = OxipayPayload{
+	var oxipayPayload = OxipayPayload{
 		DeviceID:        "foobar",
 		MerchantID:      "3342342",
 		FinanceAmount:   1000,
@@ -214,6 +244,18 @@ func validateRequest() {
 
 func getRegisteredTerminal(origin string) (Terminal, error) {
 	// @ToDo query from database
+	sql := "SELECT * FROM oxipay_vend_map WHERE origin_domain = $1 AND 1=1"
+	stmt, err := db.Prepare(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	row := stmt.QueryRow(origin)
+	x := row.Scan(&row)
+
+	log.Printf("test %v", x)
+	// process rows
+
 	return Terminal{
 		InternalRegisterID: "2341341",
 		InternalSignKey:    "asdkjfhasdfasdf",
