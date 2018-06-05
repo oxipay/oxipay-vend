@@ -166,14 +166,15 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	// looks up the database to get the fake Oxipay terminal
 	// so that we can issue this against Oxipay
-	err = getRegisteredTerminal(origin)
+	terminal, err := getRegisteredTerminal(origin)
 
 	if err != nil {
-		// log.Printf("Using Oxipay register %s ", terminal.InternalRegisterID)
+		log.Printf("Using Oxipay register %s ", terminal.InternalRegisterID)
 	}
 
 	// send off to Oxipay
-	var oxipayPayload = OxipayPayload{
+	//var oxipayPayload
+	_ = OxipayPayload{
 		DeviceID:        "foobar",
 		MerchantID:      "3342342",
 		FinanceAmount:   1000,
@@ -183,7 +184,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		PreApprovalCode: 1234,
 	}
 
-	log.Println(oxipayPayload.generatePayload())
+	//log.Println(oxipayPayload.generatePayload())
 
 	// We build a JSON response object that contains important information for
 	// which step we should send back to Vend to guide the payment flow.
@@ -252,45 +253,38 @@ func validateRequest() {
 
 }
 
-func getRegisteredTerminal(origin string) error {
+func getRegisteredTerminal(origin string) (Terminal, error) {
 	// @ToDo query from database
 	sql := `SELECT 
 			 fxl_register_id, 
 			 internal_signing_key, 
-			 original_domain,
+			 origin_domain,
 			 vend_register_id
 			FROM oxipay_vend_map WHERE origin_domain = ? AND 1=1`
-	// s := Terminal{}
 
-	rows, _ := db.Query(sql, origin)
-	cols, _ := rows.Columns()
+	rows, err := db.Query(sql, origin)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var terminal = Terminal{}
 
 	for rows.Next() {
-		// Create a slice of interface{}'s to represent each column,
-		// and a second slice to contain pointers to each item in the columns slice.
-		columns := make([]interface{}, len(cols))
-		columnPointers := make([]interface{}, len(cols))
-		for i := range columns {
-			columnPointers[i] = &columns[i]
-		}
-
-		// Scan the result into the column pointers...
-		if err := rows.Scan(columnPointers...); err != nil {
-			return err
-		}
-
-		// Create our map, and retrieve the value for each column from the pointers slice,
-		// storing it in the map with the name of the column as the key.
-		m := make(map[string]interface{})
-		for i, colName := range cols {
-			val := columnPointers[i].(*interface{})
-			m[colName] = *val
+		var err = rows.Scan(
+			&terminal.InternalRegisterID,
+			&terminal.InternalSignKey,
+			&terminal.Origin,
+			&terminal.VendRegisterID,
+		)
+		if err != nil {
+			log.Fatal(err)
 		}
 
 		// Outputs: map[columnName:value columnName2:value2 columnName3:value3 ...]
-		fmt.Print(m)
+		fmt.Print(terminal)
 	}
-	return nil
+	return terminal, nil
 }
 
 func (payload *OxipayPayload) generatePayload() string {
