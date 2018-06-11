@@ -11,7 +11,6 @@ import (
 	"strings"
 	// "time"s
 	"database/sql"
-	"reflect"
 
 	_ "github.com/go-sql-driver/mysql"
 	shortid "github.com/ventu-io/go-shortid"
@@ -172,9 +171,9 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Using Oxipay register %s ", terminal.InternalRegisterID)
 	}
 
-	// send off to Oxipay
+	// send off to Oxipayhttp://wdwebdriver.io/api/utility/waitUntil.html
 	//var oxipayPayload
-	_ = OxipayPayload{
+	var oxipayPayload = OxipayPayload{
 		DeviceID:        "foobar",
 		MerchantID:      "3342342",
 		FinanceAmount:   1000,
@@ -184,7 +183,8 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		PreApprovalCode: 1234,
 	}
 
-	//log.Println(oxipayPayload.generatePayload())
+	// send off to oxipay
+	log.Println(oxipayPayload.generatePayload())
 
 	// We build a JSON response object that contains important information for
 	// which step we should send back to Vend to guide the payment flow.
@@ -289,16 +289,18 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 func (payload *OxipayPayload) generatePayload() string {
 
-	x := reflect.ValueOf(payload)
+	// x := reflect.ValueOf(payload)
 
-	values := make([]interface{}, x.NumField())
+	// x = reflect.TypeOf
+	//fmt.Println(x.NumField())
+	// values := make([]interface{}, x.NumField())
 
-	var ret string
+	// var ret string
 
-	for element := range values {
-		ret = fmt.Sprintf("element is %v", element)
-		fmt.Println(ret)
-	}
+	// for element := range values {
+	// 	ret = fmt.Sprintf("element is %v", element)
+	// 	fmt.Println(ret)
+	// }
 	return ""
 }
 
