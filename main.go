@@ -2,7 +2,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -291,17 +290,26 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 func (payload *OxipayPayload) generatePayload() string {
 
-	var buffer bytes.Buffer
-	var x = reflect.ValueOf(payload).Elem()
+	//var buffer bytes.Buffer
+	var x = reflect.ValueOf(payload)
 
+	//keys := make(map[string]interface{}, x.NumField())
+	// https://research.swtch.com/interfaces
+	//https://blog.golang.org/laws-of-reflection
 	for i := 0; i < x.NumField(); i++ {
-		valueField := x.Field(i)
-		typeField := x.Type().Field(i)
-		tag := typeField.Tag
-		buffer.WriteString(fmt.Sprintf("Field Name: %s,\t Field Value: %v,\t Tag Value: %s\n", typeField.Name, valueField.Interface(), tag.Get("tag_name")))
+		field := reflect.ValueOf(x.Field(i))
+
+		_fieldd
+		//var name string = x.
+		//keys[i] = name
+
+		//typeField := x.Type().Field(i).Name
+		//tag := typeField.Tag
+		//buffer.WriteString(fmt.Sprintf("Field Name: %s,\t Field Value: %v,\t Tag Value: %s\n", typeField.Name, valueField.Interface(), tag.Get("tag_name")))
 
 	}
-	return buffer.String()
+	//return buffer.String()
+	return ""
 	//_ = x
 
 	// x = reflect.TypeOf
