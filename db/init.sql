@@ -1,4 +1,4 @@
--- create database vend;
+create database vend;
 use vend;
 
 DROP TABLE IF EXISTS `oxipay_vend_map`;

@@ -15,7 +15,7 @@ func TestGeneratePayload(t *testing.T) {
 		PreApprovalCode: 1234,
 	}
 
-	oxipayPayload.generatePayload()
+	var x = oxipayPayload.generatePayload()
 
-	t.Error("Something ")
+	t.Log("Something v	", x)
 }

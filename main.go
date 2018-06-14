@@ -2,11 +2,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	// "time"s
@@ -289,7 +291,18 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 func (payload *OxipayPayload) generatePayload() string {
 
-	// x := reflect.ValueOf(payload)
+	var buffer bytes.Buffer
+	var x = reflect.ValueOf(payload).Elem()
+
+	for i := 0; i < x.NumField(); i++ {
+		valueField := x.Field(i)
+		typeField := x.Type().Field(i)
+		tag := typeField.Tag
+		buffer.WriteString(fmt.Sprintf("Field Name: %s,\t Field Value: %v,\t Tag Value: %s\n", typeField.Name, valueField.Interface(), tag.Get("tag_name")))
+
+	}
+	return buffer.String()
+	//_ = x
 
 	// x = reflect.TypeOf
 	//fmt.Println(x.NumField())
@@ -301,10 +314,10 @@ func (payload *OxipayPayload) generatePayload() string {
 	// 	ret = fmt.Sprintf("element is %v", element)
 	// 	fmt.Println(ret)
 	// }
-	return ""
+	//return ""
 }
 
 func signMessage(plainText string, signingKey string) string {
 
-	return ""
+	return "here"
 }
