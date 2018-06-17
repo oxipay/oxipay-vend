@@ -2,17 +2,25 @@
 package main
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	// "time"s
 	"database/sql"
+	_ "sort"
 
+	_ "crypto/hmac"
+	"crypto/sha256"
+
+	"github.com/fatih/structs"
 	_ "github.com/go-sql-driver/mysql"
 	shortid "github.com/ventu-io/go-shortid"
 )
@@ -42,9 +50,10 @@ type OxipayPayload struct {
 	OperatorID        string `json:"x_operator_id"`
 	FirmwareVersion   string `json:"x_firmware_version"`
 	PosTransactionRef string `json:"x_pos_transaction_ref"`
-	PreApprovalCode   int    `json:"x_pre_approval_code"`
-	FinanceAmount     int    `json:"x_finance_amount"`
-	PurchaseAmount    int    `json:"x_purchase_amount"`
+	PreApprovalCode   string `json:"x_pre_approval_code"`
+	FinanceAmount     string `json:"x_finance_amount"`
+	PurchaseAmount    string `json:"x_purchase_amount"`
+	Signature         string `json:"x_signature"`
 }
 
 var db *sql.DB
@@ -177,11 +186,11 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	var oxipayPayload = OxipayPayload{
 		DeviceID:        "foobar",
 		MerchantID:      "3342342",
-		FinanceAmount:   1000,
+		FinanceAmount:   "1000",
 		FirmwareVersion: "version 4.0",
 		OperatorID:      "John",
-		PurchaseAmount:  1000,
-		PreApprovalCode: 1234,
+		PurchaseAmount:  "1000",
+		PreApprovalCode: "1234",
 	}
 
 	// send off to oxipay
@@ -290,42 +299,53 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 func (payload *OxipayPayload) generatePayload() string {
 
-	//var buffer bytes.Buffer
-	var x = reflect.ValueOf(payload)
+	var buffer bytes.Buffer
 
-	//keys := make(map[string]interface{}, x.NumField())
-	// https://research.swtch.com/interfaces
-	//https://blog.golang.org/laws-of-reflection
-	for i := 0; i < x.NumField(); i++ {
-		field := reflect.ValueOf(x.Field(i))
+	// create a temporary map so we can sort the keys,
+	// go intentionally randomises maps so we need to
+	// store the keys in an array which we can sort
+	m := structs.Map(payload)
+	keys := make([]string, len(m))
 
-		_fieldd
-		//var name string = x.
-		//keys[i] = name
+	var i int
 
-		//typeField := x.Type().Field(i).Name
-		//tag := typeField.Tag
-		//buffer.WriteString(fmt.Sprintf("Field Name: %s,\t Field Value: %v,\t Tag Value: %s\n", typeField.Name, valueField.Interface(), tag.Get("tag_name")))
-
+	for k := range m {
+		keys[i] = k
+		i++
 	}
-	//return buffer.String()
-	return ""
-	//_ = x
+	sort.Strings(keys)
 
-	// x = reflect.TypeOf
-	//fmt.Println(x.NumField())
-	// values := make([]interface{}, x.NumField())
+	var s string
+	for _, v := range keys {
+		s = ""
 
-	// var ret string
+		// there shouldn't be any nil values
+		// Signature needs to be populated with the actual HMAC
+		// call
+		if m[v] != nil || v == "Signature" {
+			s = m[v].(string)
+		}
+		//fmt.Println("x ", v, s)
+		buffer.WriteString(fmt.Sprintf("%s=%s", v, s))
+	}
 
-	// for element := range values {
-	// 	ret = fmt.Sprintf("element is %v", element)
-	// 	fmt.Println(ret)
-	// }
-	//return ""
+	// fmt.Println(keys)
+	y := buffer.String()
+	return y
 }
 
-func signMessage(plainText string, signingKey string) string {
-
-	return "here"
+func (payload *OxipayPayload) signMessage(plainText string, signingKey string) {
+	message := payload.generatePayload()
+	key := []byte("TEST")
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(message))
+	hex.EncodeToString(mac.Sum(nil))
+	payload.S
 }
+
+// func CheckMAC(message, messageMAC, key []byte) bool {
+// 	mac := hmac.New(sha256.New, key)
+// 	mac.Write(message)
+// 	expectedMAC := mac.Sum(nil)
+// 	return hmac.Equal(messageMAC, expectedMAC)
+// }

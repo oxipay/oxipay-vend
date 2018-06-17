@@ -1,2 +1,4 @@
 package: github.com/vend/peg
-import: []
+import:
+- package: github.com/fatih/structs
+  version: ^1.0.0
