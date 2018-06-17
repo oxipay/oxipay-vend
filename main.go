@@ -81,10 +81,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("Connected to Database")
-
 	// test to make sure it's all good
 	if err := db.Ping(); err != nil {
+		log.Printf("Unable to connect to %s", dbName)
 		log.Fatal(err)
 	}
 
@@ -126,6 +125,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	amount := r.Form.Get("amount")
 	outcome := r.Form.Get("outcome") // IMPORTANT: this only applies to this package and is never sent in production.
 	origin := r.Form.Get("origin")
+	code := r.Form.Get("paymentcode")
 	registerID := r.Form.Get("register_id")
 
 	// Reject requests with required arguments that are empty. By default Vend
@@ -186,15 +186,20 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	var oxipayPayload = OxipayPayload{
 		DeviceID:        "foobar",
 		MerchantID:      "3342342",
-		FinanceAmount:   "1000",
+		FinanceAmount:   amount,
 		FirmwareVersion: "version 4.0",
 		OperatorID:      "John",
-		PurchaseAmount:  "1000",
-		PreApprovalCode: "1234",
+		PurchaseAmount:  amount,
+		PreApprovalCode: code,
 	}
 
 	// send off to oxipay
-	log.Println(oxipayPayload.generatePayload())
+	plainText := oxipayPayload.generatePayload()
+	log.Printf("PlainTxt: %s", plainText)
+
+	signature := SignMessage(plainText, "TEST")
+	log.Print("signature : ", signature)
+	log.Print(oxipayPayload)
 
 	// We build a JSON response object that contains important information for
 	// which step we should send back to Vend to guide the payment flow.
@@ -250,14 +255,6 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	w.Write(responseJSON)
 }
-
-// func (terminal *Terminal) Scan(value interface{}) error {
-
-// 	if value == nil {
-
-// 	}
-// 	return errors.New("Failed to scan Terminal type")
-// }
 
 func validateRequest() {
 
@@ -334,13 +331,14 @@ func (payload *OxipayPayload) generatePayload() string {
 	return y
 }
 
-func (payload *OxipayPayload) signMessage(plainText string, signingKey string) {
-	message := payload.generatePayload()
-	key := []byte("TEST")
+// SignMessage will generate an HMAC of the plaintext
+func SignMessage(plainText string, signingKey string) string {
+
+	key := []byte(signingKey)
 	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(message))
-	hex.EncodeToString(mac.Sum(nil))
-	payload.S
+	mac.Write([]byte(plainText))
+
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // func CheckMAC(message, messageMAC, key []byte) bool {

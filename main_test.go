@@ -15,7 +15,9 @@ func TestGeneratePayload(t *testing.T) {
 		PreApprovalCode: "1234",
 	}
 
-	var x = oxipayPayload.generatePayload()
+	var plainText = oxipayPayload.generatePayload()
+	t.Log("Plaintext", plainText)
 
-	t.Log("Something v	", x)
+	var signature = SignMessage(plainText, "TEST")
+	t.Log("Something v	", signature)
 }
