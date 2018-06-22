@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -37,10 +38,11 @@ const (
 
 // Terminal terminal mapping
 type Terminal struct {
-	InternalRegisterID string // Oxipay registerid
-	InternalSignKey    string
-	Origin             string
-	VendRegisterID     string
+	FxlRegisterId       string // Oxipay registerid
+	FxlSellerId         string
+	FxlDeviceSigningKey string
+	Origin              string
+	VendRegisterId      string
 }
 
 // OxipayPayload Payload used to send to Oxipay
@@ -125,6 +127,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	amount := r.Form.Get("amount")
 	outcome := r.Form.Get("outcome") // IMPORTANT: this only applies to this package and is never sent in production.
 	origin := r.Form.Get("origin")
+	origin, _ = url.PathUnescape(origin) // @todo, do we care about errors , we should validate?
 	code := r.Form.Get("paymentcode")
 	registerID := r.Form.Get("register_id")
 
@@ -178,28 +181,31 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	terminal, err := getRegisteredTerminal(origin)
 
 	if err != nil {
-		log.Printf("Using Oxipay register %s ", terminal.InternalRegisterID)
+		log.Printf("Using Oxipay register %s ", terminal.FxlRegisterId)
 	}
 
 	// send off to Oxipayhttp://wdwebdriver.io/api/utility/waitUntil.html
 	//var oxipayPayload
 	var oxipayPayload = OxipayPayload{
-		DeviceID:        "foobar",
-		MerchantID:      "3342342",
+		DeviceID:        terminal.FxlRegisterId,
+		MerchantID:      terminal.FxlSellerId,
 		FinanceAmount:   amount,
-		FirmwareVersion: "version 4.0",
-		OperatorID:      "John",
+		FirmwareVersion: "vend_integration_v0.0.1",
+		OperatorID:      "Vend",
 		PurchaseAmount:  amount,
 		PreApprovalCode: code,
 	}
 
-	// send off to oxipay
-	plainText := oxipayPayload.generatePayload()
-	log.Printf("PlainTxt: %s", plainText)
+	// use
+	log.Printf("Use the following payload for Oxipay: %v", oxipayPayload)
 
-	signature := SignMessage(plainText, "TEST")
-	log.Print("signature : ", signature)
-	log.Print(oxipayPayload)
+	// generate the plaintext for the signature
+	plainText := oxipayPayload.generatePayload()
+	log.Printf("Oxipay plain text: %s", plainText)
+
+	// sign the message
+	signature := SignMessage(plainText, terminal.FxlDeviceSigningKey)
+	log.Printf("Oxipay signature: %s", signature)
 
 	// We build a JSON response object that contains important information for
 	// which step we should send back to Vend to guide the payment flow.
@@ -264,7 +270,8 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 	// @ToDo query from database
 	sql := `SELECT 
 			 fxl_register_id, 
-			 internal_signing_key, 
+			 fxl_seller_id,
+			 fxl_device_signing_key, 
 			 origin_domain,
 			 vend_register_id
 			FROM oxipay_vend_map WHERE origin_domain = ? AND 1=1`
@@ -279,10 +286,11 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 	for rows.Next() {
 		var err = rows.Scan(
-			&terminal.InternalRegisterID,
-			&terminal.InternalSignKey,
+			&terminal.FxlRegisterId,
+			&terminal.FxlSellerId,
+			&terminal.FxlDeviceSigningKey,
 			&terminal.Origin,
-			&terminal.VendRegisterID,
+			&terminal.VendRegisterId,
 		)
 		if err != nil {
 			log.Fatal(err)

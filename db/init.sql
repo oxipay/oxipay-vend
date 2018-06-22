@@ -6,7 +6,8 @@ DROP TABLE IF EXISTS `oxipay_vend_map`;
 create table oxipay_vend_map (
     id int NOT NULL  auto_increment,
     fxl_register_id  text,
-    internal_signing_key text,
+    fxl_seller_id text,
+    fxl_device_signing_key text,
     origin_domain text NOT NULL ,
     vend_register_id text,
     created_date datetime,
@@ -18,16 +19,20 @@ create table oxipay_vend_map (
 
 
 -- insert test records
+
 INSERT INTO oxipay_vend_map (
     fxl_register_id,
-    internal_signing_key, 
+    fxl_seller_id,
+    fxl_device_signing_key, 
     origin_domain,
     vend_register_id,
     created_by
 ) VALUES (
-    '2341341',
-    'asdkjfhasdfasdf',
-    'foo.com',
-    'registerfoo',
+    'Oxipos',
+    '30188127',
+    'NJWxKE5WLfF2',
+    'https://demo.oxipay.com.au',
+    '57d863b4-4ae0-492c-b44a-326db76f7dac',
     'andrewm'
 );
+
