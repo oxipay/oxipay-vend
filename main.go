@@ -165,9 +165,6 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Received %f from %s for register %s", amountFloat, origin, registerID)
 
-	// Here is the point where you have all the information you need to send a
-	// request to your payment gateway or terminal to process the transaction
-	// amount.
 	//
 	// To suggest this, we simulate waiting for a payment completion for a few
 	// seconds. In reality this step can take much longer as the buyer completes
@@ -199,13 +196,19 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// use
 	log.Printf("Use the following payload for Oxipay: %v", oxipayPayload)
 
+	// Here is the point where you have all the information you need to send a
+	// request to your payment gateway or terminal to process the transaction
+	// amount.
+	var gatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
+	client, err := http.Post(gatewayURL, "application/json", &oxipayPayload)
+
 	// generate the plaintext for the signature
 	plainText := oxipayPayload.generatePayload()
 	log.Printf("Oxipay plain text: %s", plainText)
 
 	// sign the message
-	signature := SignMessage(plainText, terminal.FxlDeviceSigningKey)
-	log.Printf("Oxipay signature: %s", signature)
+	oxipayPayload.Signature = SignMessage(plainText, terminal.FxlDeviceSigningKey)
+	log.Printf("Oxipay signature: %s", oxipayPayload.Signature)
 
 	// We build a JSON response object that contains important information for
 	// which step we should send back to Vend to guide the payment flow.
