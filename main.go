@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -38,11 +39,11 @@ const (
 
 // Terminal terminal mapping
 type Terminal struct {
-	FxlRegisterId       string // Oxipay registerid
-	FxlSellerId         string
+	FxlRegisterID       string // Oxipay registerid
+	FxlSellerID         string
 	FxlDeviceSigningKey string
 	Origin              string
-	VendRegisterId      string
+	VendRegisterID      string
 }
 
 // OxipayPayload Payload used to send to Oxipay
@@ -105,6 +106,30 @@ func main() {
 
 	log.Printf("Starting webserver on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func processAuthorisation(oxipayPayload OxipayPayload) {
+	var authorisationURL = "https://sandboxpos.oxipay.com.au/webapi/v1/ProcessAuthorisation"
+
+	jsonValue, _ := json.Marshal(oxipayPayload)
+
+	request, err := http.NewRequest("POST", authorisationURL, bytes.NewBuffer(jsonValue))
+	// @todo don't swallow errors
+	if err != nil {
+		panic(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	client := http.Client{}
+	response, responseErr := client.Do(request)
+	if responseErr != nil {
+		panic(responseErr)
+	}
+	defer response.Body.Close()
+	fmt.Println("response Status:", response.Status)
+	fmt.Println("response Headers:", response.Header)
+	body, _ := ioutil.ReadAll(response.Body)
+	fmt.Println("response Body:", string(body))
 }
 
 // Index displays the main payment processing page, giving the user options of
@@ -175,32 +200,24 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	// looks up the database to get the fake Oxipay terminal
 	// so that we can issue this against Oxipay
+
 	terminal, err := getRegisteredTerminal(origin)
 
 	if err != nil {
-		log.Printf("Using Oxipay register %s ", terminal.FxlRegisterId)
+		log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
 	}
 
-	// send off to Oxipayhttp://wdwebdriver.io/api/utility/waitUntil.html
+	// send off to Oxipay
 	//var oxipayPayload
 	var oxipayPayload = OxipayPayload{
-		DeviceID:        terminal.FxlRegisterId,
-		MerchantID:      terminal.FxlSellerId,
+		DeviceID:        terminal.FxlRegisterID,
+		MerchantID:      terminal.FxlSellerID,
 		FinanceAmount:   amount,
 		FirmwareVersion: "vend_integration_v0.0.1",
 		OperatorID:      "Vend",
 		PurchaseAmount:  amount,
 		PreApprovalCode: code,
 	}
-
-	// use
-	log.Printf("Use the following payload for Oxipay: %v", oxipayPayload)
-
-	// Here is the point where you have all the information you need to send a
-	// request to your payment gateway or terminal to process the transaction
-	// amount.
-	var gatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
-	client, err := http.Post(gatewayURL, "application/json", &oxipayPayload)
 
 	// generate the plaintext for the signature
 	plainText := oxipayPayload.generatePayload()
@@ -209,6 +226,16 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// sign the message
 	oxipayPayload.Signature = SignMessage(plainText, terminal.FxlDeviceSigningKey)
 	log.Printf("Oxipay signature: %s", oxipayPayload.Signature)
+
+	// use
+	log.Printf("Use the following payload for Oxipay: %v", oxipayPayload)
+
+	// Here is the point where you have all the information you need to send a
+	// request to your payment gateway or terminal to process the transaction
+	// amount.
+	//var gatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
+
+	processAuthorisation(oxipayPayload)
 
 	// We build a JSON response object that contains important information for
 	// which step we should send back to Vend to guide the payment flow.
@@ -270,7 +297,7 @@ func validateRequest() {
 }
 
 func getRegisteredTerminal(origin string) (Terminal, error) {
-	// @ToDo query from database
+
 	sql := `SELECT 
 			 fxl_register_id, 
 			 fxl_seller_id,
@@ -287,13 +314,14 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 	var terminal = Terminal{}
 
+	// @todo error if it can't find the terminal
 	for rows.Next() {
 		var err = rows.Scan(
-			&terminal.FxlRegisterId,
-			&terminal.FxlSellerId,
+			&terminal.FxlRegisterID,
+			&terminal.FxlSellerID,
 			&terminal.FxlDeviceSigningKey,
 			&terminal.Origin,
-			&terminal.VendRegisterId,
+			&terminal.VendRegisterID,
 		)
 		if err != nil {
 			log.Fatal(err)
