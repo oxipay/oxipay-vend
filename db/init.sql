@@ -29,8 +29,8 @@ INSERT INTO oxipay_vend_map (
     created_by
 ) VALUES (
     'Oxipos',
-    '30188127',
-    'NJWxKE5WLfF2',
+    '30188105',
+    'JCjbPGtuniWr',
     'https://demo.oxipay.com.au',
     '57d863b4-4ae0-492c-b44a-326db76f7dac',
     'andrewm'

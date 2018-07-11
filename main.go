@@ -12,17 +12,17 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
+	"reflect"
 	"strconv"
 	"strings"
 	// "time"s
+	_ "crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
 	_ "sort"
 
-	_ "crypto/hmac"
-	"crypto/sha256"
+	gouuid "github.com/nu7hatch/gouuid"
 
-	"github.com/fatih/structs"
 	_ "github.com/go-sql-driver/mysql"
 	shortid "github.com/ventu-io/go-shortid"
 )
@@ -56,7 +56,7 @@ type OxipayPayload struct {
 	PreApprovalCode   string `json:"x_pre_approval_code"`
 	FinanceAmount     string `json:"x_finance_amount"`
 	PurchaseAmount    string `json:"x_purchase_amount"`
-	Signature         string `json:"x_signature"`
+	Signature         string `json:"signature"`
 }
 
 var db *sql.DB
@@ -111,7 +111,11 @@ func main() {
 func processAuthorisation(oxipayPayload OxipayPayload) {
 	var authorisationURL = "https://sandboxpos.oxipay.com.au/webapi/v1/ProcessAuthorisation"
 
+	//var authorisationURL = "http://localhost:4000"
+
 	jsonValue, _ := json.Marshal(oxipayPayload)
+
+	fmt.Println(string(jsonValue))
 
 	request, err := http.NewRequest("POST", authorisationURL, bytes.NewBuffer(jsonValue))
 	// @todo don't swallow errors
@@ -121,7 +125,9 @@ func processAuthorisation(oxipayPayload OxipayPayload) {
 	request.Header.Set("Content-Type", "application/json")
 
 	client := http.Client{}
-	response, responseErr := client.Do(request)
+	response, responseErr := client.Post(authorisationURL, "application/json", bytes.NewBuffer(jsonValue))
+
+	// response, responseErr := client.Do(request)
 	if responseErr != nil {
 		panic(responseErr)
 	}
@@ -153,7 +159,8 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	outcome := r.Form.Get("outcome") // IMPORTANT: this only applies to this package and is never sent in production.
 	origin := r.Form.Get("origin")
 	origin, _ = url.PathUnescape(origin) // @todo, do we care about errors , we should validate?
-	code := r.Form.Get("paymentcode")
+	code := r.PostForm.Get("paymentcode")
+	code = "513526"
 	registerID := r.Form.Get("register_id")
 
 	// Reject requests with required arguments that are empty. By default Vend
@@ -207,16 +214,19 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
 	}
 
+	txnRef, err := gouuid.NewV4()
+
 	// send off to Oxipay
 	//var oxipayPayload
 	var oxipayPayload = OxipayPayload{
-		DeviceID:        terminal.FxlRegisterID,
-		MerchantID:      terminal.FxlSellerID,
-		FinanceAmount:   amount,
-		FirmwareVersion: "vend_integration_v0.0.1",
-		OperatorID:      "Vend",
-		PurchaseAmount:  amount,
-		PreApprovalCode: code,
+		DeviceID:          terminal.FxlRegisterID,
+		MerchantID:        terminal.FxlSellerID,
+		PosTransactionRef: txnRef.String(),
+		FinanceAmount:     amount,
+		FirmwareVersion:   "vend_integration_v0.0.1",
+		OperatorID:        "Vend",
+		PurchaseAmount:    amount,
+		PreApprovalCode:   code,
 	}
 
 	// generate the plaintext for the signature
@@ -335,39 +345,52 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 func (payload *OxipayPayload) generatePayload() string {
 
-	var buffer bytes.Buffer
+	//var buffer bytes.Buffer
 
 	// create a temporary map so we can sort the keys,
 	// go intentionally randomises maps so we need to
 	// store the keys in an array which we can sort
-	m := structs.Map(payload)
-	keys := make([]string, len(m))
 
-	var i int
+	v := reflect.ValueOf(payload).Elem()
+	fmt.Print(v.NumField())
 
-	for k := range m {
-		keys[i] = k
-		i++
+	keys := make([]interface{}, v.NumField())
+
+	for i := 0; i < v.NumField(); i++ {
+		data := v.Field(i).Interface()
+		tag := v.Type().Field(i).Tag
+		tagArr := strings.Split(tag(String), ",")
+		fmt.Printf("data %v : %v \n\n", tag, data)
+		// keys[i]
+
 	}
-	sort.Strings(keys)
+	fmt.Println(keys)
+	// 	m := structs.Map(payload)
 
-	var s string
-	for _, v := range keys {
-		s = ""
+	// var i int
 
-		// there shouldn't be any nil values
-		// Signature needs to be populated with the actual HMAC
-		// call
-		if m[v] != nil || v == "Signature" {
-			s = m[v].(string)
-		}
-		//fmt.Println("x ", v, s)
-		buffer.WriteString(fmt.Sprintf("%s=%s", v, s))
-	}
+	// for k := range m {
+	// 	keys[i] = k
+	// 	i++
+	// }
+	// sort.Strings(keys)
 
-	// fmt.Println(keys)
-	y := buffer.String()
-	return y
+	// var s string
+	// for _, v := range keys {
+	// 	s = ""
+
+	// 	// there shouldn't be any nil values
+	// 	// Signature needs to be populated with the actual HMAC
+	// 	// call
+	// 	if m[v] != nil && v != "Signature" {
+	// 		s = m[v].(string)
+	// 		buffer.WriteString(fmt.Sprintf("%s=%s", v, s))
+	// 	}
+	// }
+
+	// // fmt.Println(keys)
+	// y := buffer.String()
+	return ""
 }
 
 // SignMessage will generate an HMAC of the plaintext
