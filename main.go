@@ -19,7 +19,7 @@ import (
 	_ "crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
-	_ "sort"
+	"sort"
 
 	gouuid "github.com/nu7hatch/gouuid"
 
@@ -70,7 +70,7 @@ func main() {
 	dbName := "vend"
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", dbUser, dbPassword, host, dbName)
 
-	log.Printf("Attempting to connect to %s \n", dsn)
+	log.Printf("Attempting to connect to database %s \n", dsn)
 
 	// connect to the database
 	// @todo grab config
@@ -94,7 +94,6 @@ func main() {
 	// required by the frontend.
 	fileServer := http.FileServer(http.Dir("assets"))
 	http.Handle("/assets/", http.StripPrefix("/assets/", fileServer))
-
 	http.HandleFunc("/", Index)
 	http.HandleFunc("/pay", PaymentHandler)
 
@@ -159,8 +158,8 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	outcome := r.Form.Get("outcome") // IMPORTANT: this only applies to this package and is never sent in production.
 	origin := r.Form.Get("origin")
 	origin, _ = url.PathUnescape(origin) // @todo, do we care about errors , we should validate?
-	code := r.PostForm.Get("paymentcode")
-	code = "513526"
+	code := r.Form.Get("paymentcode")
+
 	registerID := r.Form.Get("register_id")
 
 	// Reject requests with required arguments that are empty. By default Vend
@@ -345,52 +344,47 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 
 func (payload *OxipayPayload) generatePayload() string {
 
-	//var buffer bytes.Buffer
+	var buffer bytes.Buffer
 
 	// create a temporary map so we can sort the keys,
 	// go intentionally randomises maps so we need to
 	// store the keys in an array which we can sort
 
-	v := reflect.ValueOf(payload).Elem()
-	fmt.Print(v.NumField())
+	v := reflect.TypeOf(payload).Elem()
+	x := reflect.ValueOf(payload).Elem()
+	fmt.Print(x.NumField())
 
-	keys := make([]interface{}, v.NumField())
+	payloadList := make(map[string]string, x.NumField())
 
-	for i := 0; i < v.NumField(); i++ {
-		data := v.Field(i).Interface()
-		tag := v.Type().Field(i).Tag
-		tagArr := strings.Split(tag(String), ",")
+	for i := 0; i < x.NumField(); i++ {
+		field := x.Field(i)
+		ftype := v.Field(i)
+
+		data := field.Interface()
+		tag := ftype.Tag.Get("json")
+		payloadList[tag] = data.(string)
+
 		fmt.Printf("data %v : %v \n\n", tag, data)
-		// keys[i]
-
 	}
-	fmt.Println(keys)
-	// 	m := structs.Map(payload)
 
-	// var i int
+	fmt.Print(payloadList)
 
-	// for k := range m {
-	// 	keys[i] = k
-	// 	i++
-	// }
-	// sort.Strings(keys)
+	var keys []string
+	for k := range payloadList {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 
-	// var s string
-	// for _, v := range keys {
-	// 	s = ""
+	for _, v := range keys {
+		// there shouldn't be any nil values
+		// Signature needs to be populated with the actual HMAC
+		// call
+		if v != "signature" {
+			buffer.WriteString(fmt.Sprintf("%s%s", v, payloadList[v]))
+		}
+	}
 
-	// 	// there shouldn't be any nil values
-	// 	// Signature needs to be populated with the actual HMAC
-	// 	// call
-	// 	if m[v] != nil && v != "Signature" {
-	// 		s = m[v].(string)
-	// 		buffer.WriteString(fmt.Sprintf("%s=%s", v, s))
-	// 	}
-	// }
-
-	// // fmt.Println(keys)
-	// y := buffer.String()
-	return ""
+	return buffer.String()
 }
 
 // SignMessage will generate an HMAC of the plaintext

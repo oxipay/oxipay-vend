@@ -18,8 +18,8 @@
   <div id="statusMessage"></div>
   
   <div id="outcomes">
-    <form>
-      <label>Payment Code</label>
+    <form action="/pay" method="POST" id="paymentform">
+      <label>Payment Code 1</label>
       <input maxlength="6" minlength="6" name="paymentcode" id="paymentcode" pattern="/(0-9){6}/" />
 
     </form>
@@ -30,7 +30,7 @@
       <button class="vd-button vd-button--secondary" onclick="cancelPayment();">
         Cancel
       </button>
-      <p><a href="javascript:void(0)" class="vd-link" onclick="seeForm();">See how to add form elements</a></p>
+      
     </div>
 
 

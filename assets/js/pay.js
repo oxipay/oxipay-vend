@@ -181,10 +181,17 @@ function checkResponse(response) {
 // sendPayment sends payment context to the gateway to begin processing the
 // payment.
 function sendPayment(outcome) {
+  debugger; 
+  // grab payment code from form
+  var paymentCode = $("#paymentcode").val()
+
+  console.log("payment code is " + paymentCode);
+
+
   // Hide outcome buttons.
   $('#outcomes').hide()
 
-  console.log('sending payment')
+  
 
   // Show tap insert or swipe card prompt.
   $('#statusMessage').empty()
@@ -206,16 +213,18 @@ function sendPayment(outcome) {
     setTimeout(exitStep(), 4000)
   }
 
-  // Request /pay endpoint to send amount to terminal and wait for respnse.
+  debugger;
+  
   $.ajax({
-      url: 'pay',
-      type: 'GET',
+      url: '/pay',
+      type: 'POST',
       dataType: 'json',
       data: {
         amount: result.amount,
         outcome: outcome,
         origin: result.origin,
-        register_id: result.register_id
+        register_id: result.register_id,
+        paymentcode: paymentCode
       }
     })
     .done(function (response) {
