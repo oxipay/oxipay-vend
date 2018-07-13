@@ -59,6 +59,26 @@ type OxipayPayload struct {
 	Signature         string `json:"signature"`
 }
 
+// OxipayResponse is the response returned from Oxipay
+type OxipayResponse struct {
+	PurchaseNumber string `json:"x_purchase_number"`
+	Status string `json:"x_status"`
+	Code string `json:"x_code"`
+	Message string `json:"x_message"`
+}
+
+// Response We build a JSON response object that contains important information for
+// which step we should send back to Vend to guide the payment flow.
+type Response struct {
+	ID         string  `json:"id"`
+	Amount     float64 `json:"amount"`
+	RegisterID string  `json:"register_id"`
+	Status     string  `json:"status"`
+	Signature     string  `json:"signature"`
+	TrackingData     string  `json:"tracking_data"`
+	
+}
+
 var db *sql.DB
 
 func main() {
@@ -107,7 +127,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-func processAuthorisation(oxipayPayload OxipayPayload) {
+func processAuthorisation(oxipayPayload OxipayPayload) *Response {
 	var authorisationURL = "https://sandboxpos.oxipay.com.au/webapi/v1/ProcessAuthorisation"
 
 	//var authorisationURL = "http://localhost:4000"
@@ -134,7 +154,18 @@ func processAuthorisation(oxipayPayload OxipayPayload) {
 	fmt.Println("response Status:", response.Status)
 	fmt.Println("response Headers:", response.Header)
 	body, _ := ioutil.ReadAll(response.Body)
-	fmt.Println("response Body:", string(body))
+
+	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
+	// into a struct
+	oxipayResponse := new(OxipayResponse)
+	err = json.Unmarshal(body, oxipayResponse)
+
+	if err != nil {
+		return _,err 
+	}
+
+	fmt.Println("response Body:", x)
+	return myResponse
 }
 
 // Index displays the main payment processing page, giving the user options of
@@ -244,19 +275,10 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// amount.
 	//var gatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
 
-	processAuthorisation(oxipayPayload)
-
-	// We build a JSON response object that contains important information for
-	// which step we should send back to Vend to guide the payment flow.
-	type Response struct {
-		ID         string  `json:"id"`
-		Amount     float64 `json:"amount"`
-		RegisterID string  `json:"register_id"`
-		Status     string  `json:"status"`
-	}
+	response := processAuthorisation(oxipayPayload)
 
 	var status string
-	switch strings.ToUpper(outcome) {
+	switch response. {
 	case "ACCEPT":
 		status = statusAccepted
 	case "CANCEL":
