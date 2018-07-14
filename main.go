@@ -14,7 +14,6 @@ import (
 	"os"
 	"reflect"
 	"strconv"
-	"strings"
 	// "time"s
 	_ "crypto/hmac"
 	"crypto/sha256"
@@ -62,21 +61,20 @@ type OxipayPayload struct {
 // OxipayResponse is the response returned from Oxipay
 type OxipayResponse struct {
 	PurchaseNumber string `json:"x_purchase_number"`
-	Status string `json:"x_status"`
-	Code string `json:"x_code"`
-	Message string `json:"x_message"`
+	Status         string `json:"x_status"`
+	Code           string `json:"x_code"`
+	Message        string `json:"x_message"`
 }
 
 // Response We build a JSON response object that contains important information for
 // which step we should send back to Vend to guide the payment flow.
 type Response struct {
-	ID         string  `json:"id"`
-	Amount     float64 `json:"amount"`
-	RegisterID string  `json:"register_id"`
-	Status     string  `json:"status"`
-	Signature     string  `json:"signature"`
-	TrackingData     string  `json:"tracking_data"`
-	
+	ID           string  `json:"id"`
+	Amount       float64 `json:"amount"`
+	RegisterID   string  `json:"register_id"`
+	Status       string  `json:"status"`
+	Signature    string  `json:"signature"`
+	TrackingData string  `json:"tracking_data"`
 }
 
 var db *sql.DB
@@ -127,8 +125,10 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-func processAuthorisation(oxipayPayload OxipayPayload) *Response {
+func processAuthorisation(oxipayPayload OxipayPayload) (*OxipayResponse, error) {
 	var authorisationURL = "https://sandboxpos.oxipay.com.au/webapi/v1/ProcessAuthorisation"
+
+	var err error
 
 	//var authorisationURL = "http://localhost:4000"
 
@@ -161,11 +161,11 @@ func processAuthorisation(oxipayPayload OxipayPayload) *Response {
 	err = json.Unmarshal(body, oxipayResponse)
 
 	if err != nil {
-		return _,err 
+		return nil, err
 	}
 
-	fmt.Println("response Body:", x)
-	return myResponse
+	fmt.Println("response Body:", oxipayResponse)
+	return oxipayResponse, err
 }
 
 // Index displays the main payment processing page, giving the user options of
@@ -275,15 +275,20 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// amount.
 	//var gatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
 
-	response := processAuthorisation(oxipayPayload)
+	oxipayResponse, err := processAuthorisation(oxipayPayload)
 
+	if err != nil {
+		http.Error(w, "There was a problem processing the request", 500)
+	}
+
+	// @todo this needs to line up better
 	var status string
-	switch response. {
-	case "ACCEPT":
+	switch oxipayResponse.Code {
+	case "SPRA01":
 		status = statusAccepted
 	case "CANCEL":
 		status = statusCancelled
-	case "DECLINE":
+	case "FPRA99":
 		status = statusDeclined
 	case "FAIL":
 		status = statusFailed
