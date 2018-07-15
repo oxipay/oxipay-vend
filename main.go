@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -240,9 +241,11 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	terminal, err := getRegisteredTerminal(origin)
 
-	if err != nil {
-		log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
+	if err == nil {
+		// redirect
+		http.Redirect(w, r, "/register", 302)
 	}
+	log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
 
 	txnRef, err := gouuid.NewV4()
 
@@ -332,7 +335,7 @@ func validateRequest() {
 
 }
 
-func getRegisteredTerminal(origin string) (Terminal, error) {
+func getRegisteredTerminal(origin string) (*Terminal, error) {
 
 	sql := `SELECT 
 			 fxl_register_id, 
@@ -348,10 +351,12 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 		log.Fatal(err)
 	}
 
-	var terminal = Terminal{}
+	var terminal = new(Terminal)
+	noRows := 0
 
 	// @todo error if it can't find the terminal
 	for rows.Next() {
+		noRows++
 		var err = rows.Scan(
 			&terminal.FxlRegisterID,
 			&terminal.FxlSellerID,
@@ -364,8 +369,13 @@ func getRegisteredTerminal(origin string) (Terminal, error) {
 		}
 
 		// Outputs: map[columnName:value columnName2:value2 columnName3:value3 ...]
-		fmt.Print(terminal)
+		// fmt.Print(terminal)
 	}
+
+	if noRows < 1 {
+		return nil, errors.New("Unable to find a matching terminal ")
+	}
+
 	return terminal, nil
 }
 
@@ -427,6 +437,7 @@ func SignMessage(plainText string, signingKey string) string {
 // func CheckMAC(message, messageMAC, key []byte) bool {
 // 	mac := hmac.New(sha256.New, key)
 // 	mac.Write(message)
+
 // 	expectedMAC := mac.Sum(nil)
 // 	return hmac.Equal(messageMAC, expectedMAC)
 // }
