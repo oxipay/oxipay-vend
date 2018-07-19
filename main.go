@@ -114,12 +114,8 @@ func main() {
 	fileServer := http.FileServer(http.Dir("assets"))
 	http.Handle("/assets/", http.StripPrefix("/assets/", fileServer))
 	http.HandleFunc("/", Index)
-
 	http.HandleFunc("/pay", PaymentHandler)
-
-	if http.ReadRequest().Method)
-		http.HandleFunc("/register", RegisterHandler)
-	}
+	http.HandleFunc("/register", RegisterHandler)
 
 	// The default port is 500, but one can be specified as an env var if needed.
 	port := "5000"
@@ -131,10 +127,33 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
+type OxipayRegistrationPayload struc {
+	MerchantID string `xml:"x_merchant_id"`
+	DeviceID string `xml:"x_device_id"`
+	DeviceToken string `xml:"x_device_token"`
+	OperatorID string `xml:"x_operator_id"`
+	FirmwareVersion string `xml:"x_firmware_version"`
+	POSVendor string `xml:"x_pos_vendor"`
+	Signature string `xml:"signature"`
+}
+
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Print(r.Method)
-	http.ServeFile(w, r, "./assets/templates/register.html")
+
+	switch r.Method {
+	case http.MethodPost:
+		r.ParseForm()
+		r.Form.Get("origin")
+		r.Form.Get("terminal")
+		register := &OxipayRegistrationPayload {
+			MerchantID: 
+		}
+
+		break
+	default:
+		http.ServeFile(w, r, "./assets/templates/register.html")
+	}
+
 }
 
 func processAuthorisation(oxipayPayload OxipayPayload) (*OxipayResponse, error) {
@@ -262,7 +281,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	// send off to Oxipay
 	//var oxipayPayload
-	var oxipayPayload = OxipayPayload{
+	var oxipayPayload = &OxipayPayload {
 		DeviceID:          terminal.FxlRegisterID,
 		MerchantID:        terminal.FxlSellerID,
 		PosTransactionRef: txnRef.String(),
