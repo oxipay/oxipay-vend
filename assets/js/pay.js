@@ -181,12 +181,9 @@ function checkResponse(response) {
 // sendPayment sends payment context to the gateway to begin processing the
 // payment.
 function sendPayment(outcome) {
-  debugger; 
+
   // grab payment code from form
   var paymentCode = $("#paymentcode").val()
-
-  console.log("payment code is " + paymentCode);
-
 
   // Hide outcome buttons.
   $('#outcomes').hide()
@@ -212,8 +209,6 @@ function sendPayment(outcome) {
     })
     setTimeout(exitStep(), 4000)
   }
-
-  debugger;
   
   $.ajax({
       url: '/pay',
@@ -304,15 +299,15 @@ function seeForm() {
   $.get('../assets/templates/forms.html', function (data) {
     $('#statusMessage').append(data)
   });
-
 }
 
 // On initial load of modal, configure the page settings such as removing the
 // close button and setting the header.
 $(function () {
+  debugger
   // Send the SETUP step with our configuration values..
   console.log('setting up')
-  setupStep()
+//  setupStep()
 
   $('#statusMessage').empty()
   $.get('../assets/templates/waiting.html', function (data) {

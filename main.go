@@ -114,7 +114,12 @@ func main() {
 	fileServer := http.FileServer(http.Dir("assets"))
 	http.Handle("/assets/", http.StripPrefix("/assets/", fileServer))
 	http.HandleFunc("/", Index)
+
 	http.HandleFunc("/pay", PaymentHandler)
+
+	if http.ReadRequest().Method)
+		http.HandleFunc("/register", RegisterHandler)
+	}
 
 	// The default port is 500, but one can be specified as an env var if needed.
 	port := "5000"
@@ -124,6 +129,12 @@ func main() {
 
 	log.Printf("Starting webserver on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+// RegisterHandler GET request. Prompt for the Merchant ID and Device Token
+func RegisterHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Print(r.Method)
+	http.ServeFile(w, r, "./assets/templates/register.html")
 }
 
 func processAuthorisation(oxipayPayload OxipayPayload) (*OxipayResponse, error) {
@@ -386,7 +397,6 @@ func (payload *OxipayPayload) generatePayload() string {
 	// create a temporary map so we can sort the keys,
 	// go intentionally randomises maps so we need to
 	// store the keys in an array which we can sort
-
 	v := reflect.TypeOf(payload).Elem()
 	x := reflect.ValueOf(payload).Elem()
 	fmt.Print(x.NumField())
