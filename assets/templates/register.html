@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>
+    Pay Example
+  </title>
+
+  <link rel="icon" href="/assets/images/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" type="text/css" href="/assets/css/vend-peg.css">
+  <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+  <script src="/assets/js/jquery-3.1.0.min.js" crossorigin="anonymous"></script>
+    
+  <script src="/assets/js/pay.js"></script>
+</head>
+
+<div class="container center">
+  <div id="statusMessage">
+      <h2>Register New POS device:</h2>
+
+      <p>We haven't seen this device before. Please provide your Oxipay Merchant ID and your device token.</p>
+  </div>
+  
+  <div id="outcomes">
+    <form action="/register" method="POST" id="paymentform">
+      <label>Device Token</label>
+      <input maxlength="6" minlength="6" name="paymentcode" id="paymentcode" pattern="/(0-9){6}/" />
+
+    </form>
+    <div class="center-text">
+      <button class="vd-button vd-button--primary" onclick="sendPayment('accept');">
+        Register
+      </button>
+      <button class="vd-button vd-button--secondary" onclick="cancelPayment();">
+        Cancel
+      </button>
+      
+    </div>
+
+
+  </div>
+</div>
+
+</html>
