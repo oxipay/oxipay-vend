@@ -127,14 +127,14 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-type OxipayRegistrationPayload struc {
-	MerchantID string `xml:"x_merchant_id"`
-	DeviceID string `xml:"x_device_id"`
-	DeviceToken string `xml:"x_device_token"`
-	OperatorID string `xml:"x_operator_id"`
+type OxipayRegistrationPayload struct {
+	MerchantID      string `xml:"x_merchant_id"`
+	DeviceID        string `xml:"x_device_id"`
+	DeviceToken     string `xml:"x_device_token"`
+	OperatorID      string `xml:"x_operator_id"`
 	FirmwareVersion string `xml:"x_firmware_version"`
-	POSVendor string `xml:"x_pos_vendor"`
-	Signature string `xml:"signature"`
+	POSVendor       string `xml:"x_pos_vendor"`
+	Signature       string `xml:"signature"`
 }
 
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
@@ -143,11 +143,23 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		r.ParseForm()
-		r.Form.Get("origin")
-		r.Form.Get("terminal")
-		register := &OxipayRegistrationPayload {
-			MerchantID: 
+
+		keys := map[string]string{
+			"merchantId":  "",
+			"origin":      "",
+			"terminalID":  "",
+			"deviceToken": "",
 		}
+
+		for key, val := range keys {
+			fmt.Printf("key: %s - Values: %s ", key, val)
+		}
+
+		// register := &OxipayRegistrationPayload {
+		// 	MerchantID:  merchantID,
+		// 	DeviceID: deviceID,
+		// 	DeviceToken:
+		// }
 
 		break
 	default:
@@ -156,7 +168,9 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func processAuthorisation(oxipayPayload OxipayPayload) (*OxipayResponse, error) {
+//func registerDevice()
+
+func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
 	var authorisationURL = "https://sandboxpos.oxipay.com.au/webapi/v1/ProcessAuthorisation"
 
 	var err error
@@ -281,7 +295,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	// send off to Oxipay
 	//var oxipayPayload
-	var oxipayPayload = &OxipayPayload {
+	var oxipayPayload = &OxipayPayload{
 		DeviceID:          terminal.FxlRegisterID,
 		MerchantID:        terminal.FxlSellerID,
 		PosTransactionRef: txnRef.String(),
