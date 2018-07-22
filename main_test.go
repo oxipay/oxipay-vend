@@ -20,6 +20,7 @@ func TestRegisterHandler(t *testing.T) {
 	req.Form.Add("Origin", "http://pos.oxipay.com.au")
 	req.Form.Add("TerminalID", "1234")
 	req.Form.Add("DeviceToken", "ABC 123")
+	req.Form.Add("OperatorID", "Test User")
 
 	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
 	rr := httptest.NewRecorder()

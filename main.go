@@ -142,30 +142,35 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPost:
-		r.ParseForm()
 
-		keys := map[string]string{
-			"merchantId":  "",
-			"origin":      "",
-			"terminalID":  "",
-			"deviceToken": "",
-		}
-
-		for key, val := range keys {
-			fmt.Printf("key: %s - Values: %s ", key, val)
-		}
-
-		// register := &OxipayRegistrationPayload {
-		// 	MerchantID:  merchantID,
-		// 	DeviceID: deviceID,
-		// 	DeviceToken:
-		// }
-
+		bind(r)
 		break
 	default:
 		http.ServeFile(w, r, "./assets/templates/register.html")
 	}
 
+}
+
+func bind(r *http.Request) *OxipayRegistrationPayload {
+	r.ParseForm()
+
+	keys := map[string]string{
+		"MerchantID":  "",
+		"Origin":      "",
+		"TerminalID":  "",
+		"DeviceToken": "",
+	}
+
+	for key, val := range keys {
+		fmt.Printf("key: %s - Values: %s ", key, val)
+	}
+
+	register := &OxipayRegistrationPayload{
+		MerchantID:  keys["MerchantID"],
+		DeviceID:    keys["DeviceID"],
+		DeviceToken: keys["DeviceToken"],
+	}
+	return register
 }
 
 //func registerDevice()
@@ -373,10 +378,6 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// https://tools.ietf.org/html/rfc7231#section-6.3.2
 	w.WriteHeader(http.StatusCreated)
 	w.Write(responseJSON)
-}
-
-func validateRequest() {
-
 }
 
 func getRegisteredTerminal(origin string) (*Terminal, error) {
