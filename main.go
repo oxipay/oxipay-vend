@@ -134,6 +134,7 @@ type OxipayRegistrationPayload struct {
 	OperatorID      string `xml:"x_operator_id"`
 	FirmwareVersion string `xml:"x_firmware_version"`
 	POSVendor       string `xml:"x_pos_vendor"`
+	TrackingData    string `xml:"tracking_data"`
 	Signature       string `xml:"signature"`
 }
 
@@ -143,7 +144,25 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 
-		bind(r)
+		registrationPayload := bind(r)
+
+		if registrationPayload.validate() {
+			plainText := generatePayload(registrationPayload)
+			log.Printf("Oxipay plain text: %s", plainText)
+
+			// sign the message
+			registrationPayload.Signature = SignMessage(plainText, registrationPayload.DeviceToken)
+			log.Printf("Oxipay signature: %s", registrationPayload.Signature)
+			// submit to oxipay
+			response, err := RegisterPosDevice(registrationPayload)
+
+			if err != nil {
+				fmt.Print(err)
+			}
+			_ = response
+			// store in the database
+		}
+
 		break
 	default:
 		http.ServeFile(w, r, "./assets/templates/register.html")
@@ -151,47 +170,70 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// RegisterPosDevice is used to register a new vend terminal
+func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
+	var registerURL = "https://sandboxpos.oxipay.com.au/webapi/v1/CreateKey"
+	var err error
+
+	jsonValue, _ := json.Marshal(payload)
+
+	fmt.Println(string(jsonValue))
+
+	client := http.Client{}
+	response, responseErr := client.Post(registerURL, "application/json", bytes.NewBuffer(jsonValue))
+
+	// response, responseErr := client.Do(request)
+	if responseErr != nil {
+		panic(responseErr)
+	}
+	defer response.Body.Close()
+	fmt.Println("response Status:", response.Status)
+	fmt.Println("response Headers:", response.Header)
+	body, _ := ioutil.ReadAll(response.Body)
+
+	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
+	// into a struct
+	oxipayResponse := new(OxipayResponse)
+	err = json.Unmarshal(body, oxipayResponse)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("response Body:", oxipayResponse)
+	return oxipayResponse, err
+
+}
+
 func bind(r *http.Request) *OxipayRegistrationPayload {
 	r.ParseForm()
 
-	keys := map[string]string{
-		"MerchantID":  "",
-		"Origin":      "",
-		"TerminalID":  "",
-		"DeviceToken": "",
-	}
-
-	for key, val := range keys {
-		fmt.Printf("key: %s - Values: %s ", key, val)
-	}
-
 	register := &OxipayRegistrationPayload{
-		MerchantID:  keys["MerchantID"],
-		DeviceID:    keys["DeviceID"],
-		DeviceToken: keys["DeviceToken"],
+		MerchantID:      r.Form.Get("MerchantID"),
+		DeviceID:        r.Form.Get("DeviceID"),
+		DeviceToken:     r.Form.Get("DeviceToken"),
+		OperatorID:      r.Form.Get("OperatorID"),
+		FirmwareVersion: r.Form.Get("FirmwareVersion"),
+		POSVendor:       "Vend",
+		TrackingData:    "",
 	}
+
 	return register
 }
 
-//func registerDevice()
+func (payload *OxipayRegistrationPayload) validate() bool {
+
+	return true
+}
 
 func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
 	var authorisationURL = "https://sandboxpos.oxipay.com.au/webapi/v1/ProcessAuthorisation"
 
 	var err error
 
-	//var authorisationURL = "http://localhost:4000"
-
 	jsonValue, _ := json.Marshal(oxipayPayload)
 
 	fmt.Println(string(jsonValue))
-
-	request, err := http.NewRequest("POST", authorisationURL, bytes.NewBuffer(jsonValue))
-	// @todo don't swallow errors
-	if err != nil {
-		panic(err)
-	}
-	request.Header.Set("Content-Type", "application/json")
 
 	client := http.Client{}
 	response, responseErr := client.Post(authorisationURL, "application/json", bytes.NewBuffer(jsonValue))
@@ -312,7 +354,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// generate the plaintext for the signature
-	plainText := oxipayPayload.generatePayload()
+	plainText := generatePayload(oxipayPayload)
 	log.Printf("Oxipay plain text: %s", plainText)
 
 	// sign the message
@@ -424,7 +466,7 @@ func getRegisteredTerminal(origin string) (*Terminal, error) {
 	return terminal, nil
 }
 
-func (payload *OxipayPayload) generatePayload() string {
+func generatePayload(payload interface{}) string {
 
 	var buffer bytes.Buffer
 

@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -11,16 +13,20 @@ func TestRegisterHandler(t *testing.T) {
 
 	// Create a request to pass to our handler. We don't have any query parameters for now, so we'll
 	// pass 'nil' as the third parameter.
-	req, err := http.NewRequest(http.MethodPost, "/register", nil)
+	form := url.Values{}
+	form.Add("MerchantID", "1234")
+	form.Add("Origin", "http://pos.oxipay.com.au")
+	form.Add("TerminalID", "1234")
+	form.Add("DeviceID", "VendDevice01")
+	form.Add("DeviceToken", "Q8dH7V9rRLXs")
+	form.Add("OperatorID", "Vend")
+
+	req, err := http.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	req.Form.Add("MerchantID", "1234")
-	req.Form.Add("Origin", "http://pos.oxipay.com.au")
-	req.Form.Add("TerminalID", "1234")
-	req.Form.Add("DeviceToken", "ABC 123")
-	req.Form.Add("OperatorID", "Test User")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
 	rr := httptest.NewRecorder()
@@ -55,7 +61,7 @@ func TestGeneratePayload(t *testing.T) {
 		PreApprovalCode: "1234",
 	}
 
-	var plainText = oxipayPayload.generatePayload()
+	var plainText = generatePayload(oxipayPayload)
 	t.Log("Plaintext", plainText)
 
 	signature := SignMessage(plainText, "TEST")
