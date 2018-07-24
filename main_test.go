@@ -19,7 +19,7 @@ func TestRegisterHandler(t *testing.T) {
 	form.Add("FirmwareVersion", "1.0")
 	form.Add("TerminalID", "1234")
 	form.Add("DeviceID", "VendDevice01")
-	form.Add("DeviceToken", "hkvaChqYp8yq")
+	form.Add("DeviceToken", "Q8dH7V9rRLXs")
 	form.Add("OperatorID", "Vend")
 
 	req, err := http.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
@@ -62,7 +62,7 @@ func TestGeneratePayload(t *testing.T) {
 		PreApprovalCode: "1234",
 	}
 
-	var plainText = generatePayload(oxipayPayload)
+	var plainText = generatePlainTextSignature(oxipayPayload)
 	t.Log("Plaintext", plainText)
 
 	signature := SignMessage(plainText, "TEST")

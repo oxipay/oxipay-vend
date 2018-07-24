@@ -59,12 +59,14 @@ type OxipayPayload struct {
 	Signature         string `json:"signature"`
 }
 
-// OxipayResponse is the response returned from Oxipay
+// OxipayResponse is the response returned from Oxipay for both a CreateKey and Sales Adjustment
 type OxipayResponse struct {
 	PurchaseNumber string `json:"x_purchase_number"`
 	Status         string `json:"x_status"`
 	Code           string `json:"x_code"`
 	Message        string `json:"x_message"`
+	Key            string `json:"x_key"`
+	Signature      string `json:"signature"`
 }
 
 // Response We build a JSON response object that contains important information for
@@ -127,6 +129,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
+// OxipayRegistrationPayload required to register a device with Oxipay
 type OxipayRegistrationPayload struct {
 	MerchantID      string `json:"x_merchant_id"`
 	DeviceID        string `json:"x_device_id"`
@@ -147,7 +150,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		registrationPayload := bind(r)
 
 		if registrationPayload.validate() {
-			plainText := generatePayload(registrationPayload)
+			plainText := generatePlainTextSignature(registrationPayload)
 			log.Printf("Oxipay plain text: %s", plainText)
 
 			// sign the message
@@ -172,6 +175,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 // RegisterPosDevice is used to register a new vend terminal
 func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
+	// @todo move to configuration
 	var registerURL = "https://sandboxpos.oxipay.com.au/webapi/v1/CreateKey"
 	var err error
 
@@ -354,7 +358,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// generate the plaintext for the signature
-	plainText := generatePayload(oxipayPayload)
+	plainText := generatePlainTextSignature(oxipayPayload)
 	log.Printf("Oxipay plain text: %s", plainText)
 
 	// sign the message
@@ -466,7 +470,8 @@ func getRegisteredTerminal(origin string) (*Terminal, error) {
 	return terminal, nil
 }
 
-func generatePayload(payload interface{}) string {
+//
+func generatePlainTextSignature(payload interface{}) string {
 
 	var buffer bytes.Buffer
 
@@ -487,7 +492,7 @@ func generatePayload(payload interface{}) string {
 		tag := ftype.Tag.Get("json")
 		payloadList[tag] = data.(string)
 
-		fmt.Printf("data %v : %v \n\n", tag, data)
+		// fmt.Printf("data %v : %v \n\n", tag, data)
 	}
 
 	fmt.Print(payloadList)
