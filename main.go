@@ -128,14 +128,14 @@ func main() {
 }
 
 type OxipayRegistrationPayload struct {
-	MerchantID      string `xml:"x_merchant_id"`
-	DeviceID        string `xml:"x_device_id"`
-	DeviceToken     string `xml:"x_device_token"`
-	OperatorID      string `xml:"x_operator_id"`
-	FirmwareVersion string `xml:"x_firmware_version"`
-	POSVendor       string `xml:"x_pos_vendor"`
-	TrackingData    string `xml:"tracking_data"`
-	Signature       string `xml:"signature"`
+	MerchantID      string `json:"x_merchant_id"`
+	DeviceID        string `json:"x_device_id"`
+	DeviceToken     string `json:"x_device_token"`
+	OperatorID      string `json:"x_operator_id"`
+	FirmwareVersion string `json:"x_firmware_version"`
+	POSVendor       string `json:"x_pos_vendor"`
+	TrackingData    string `json:"tracking_data"`
+	Signature       string `json:"signature"`
 }
 
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
@@ -233,7 +233,7 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 
 	jsonValue, _ := json.Marshal(oxipayPayload)
 
-	fmt.Println(string(jsonValue))
+	fmt.Println("Registration Payload" + string(jsonValue))
 
 	client := http.Client{}
 	response, responseErr := client.Post(authorisationURL, "application/json", bytes.NewBuffer(jsonValue))
@@ -502,7 +502,7 @@ func generatePayload(payload interface{}) string {
 		// there shouldn't be any nil values
 		// Signature needs to be populated with the actual HMAC
 		// call
-		if v != "signature" {
+		if v[0:2] == "x_" {
 			buffer.WriteString(fmt.Sprintf("%s%s", v, payloadList[v]))
 		}
 	}

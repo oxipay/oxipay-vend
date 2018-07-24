@@ -14,11 +14,12 @@ func TestRegisterHandler(t *testing.T) {
 	// Create a request to pass to our handler. We don't have any query parameters for now, so we'll
 	// pass 'nil' as the third parameter.
 	form := url.Values{}
-	form.Add("MerchantID", "1234")
+	form.Add("MerchantID", "30188105")
 	form.Add("Origin", "http://pos.oxipay.com.au")
+	form.Add("FirmwareVersion", "1.0")
 	form.Add("TerminalID", "1234")
 	form.Add("DeviceID", "VendDevice01")
-	form.Add("DeviceToken", "Q8dH7V9rRLXs")
+	form.Add("DeviceToken", "hkvaChqYp8yq")
 	form.Add("OperatorID", "Vend")
 
 	req, err := http.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
