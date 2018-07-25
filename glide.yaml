@@ -1,5 +1,5 @@
 package: github.com/vend/peg
 import:
-- package: github.com/fatih/structs
-  version: ^1.0.0
 - package: github.com/nu7hatch/gouuid
+- package: github.com/go-sql-driver/mysql
+- package: github.com/ventu-io/go-shortid
