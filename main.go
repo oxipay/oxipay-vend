@@ -15,13 +15,12 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+
 	// "time"s
 	_ "crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
 	"sort"
-
-	gouuid "github.com/nu7hatch/gouuid"
 
 	_ "github.com/go-sql-driver/mysql"
 	shortid "github.com/ventu-io/go-shortid"
@@ -80,10 +79,44 @@ type Response struct {
 	TrackingData string  `json:"tracking_data"`
 }
 
+// OxipayRegistrationPayload required to register a device with Oxipay
+type OxipayRegistrationPayload struct {
+	MerchantID      string `json:"x_merchant_id"`
+	DeviceID        string `json:"x_device_id"`
+	DeviceToken     string `json:"x_device_token"`
+	OperatorID      string `json:"x_operator_id"`
+	FirmwareVersion string `json:"x_firmware_version"`
+	POSVendor       string `json:"x_pos_vendor"`
+	TrackingData    string `json:"tracking_data"`
+	Signature       string `json:"signature"`
+}
+
 var db *sql.DB
+
+// OxpayGateway Default URL for the Oxipay Gateway @todo get from config
+var OxpayGateway = "https://testpos.oxipay.com.au/webapi/v1/"
 
 func main() {
 
+	// We are hosting all of the content in ./assets, as the resources are
+	// required by the frontend.
+	fileServer := http.FileServer(http.Dir("assets"))
+	http.Handle("/assets/", http.StripPrefix("/assets/", fileServer))
+	http.HandleFunc("/", Index)
+	http.HandleFunc("/pay", PaymentHandler)
+	http.HandleFunc("/register", RegisterHandler)
+
+	// The default port is 500, but one can be specified as an env var if needed.
+	port := "5000"
+	if os.Getenv("PORT") != "" {
+		port = os.Getenv("PORT")
+	}
+
+	log.Printf("Starting webserver on port %s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func connectToDatabase() {
 	// @todo pull from config
 	dbUser := "root"
 	dbPassword := "t9e3ioz0"
@@ -111,34 +144,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// We are hosting all of the content in ./assets, as the resources are
-	// required by the frontend.
-	fileServer := http.FileServer(http.Dir("assets"))
-	http.Handle("/assets/", http.StripPrefix("/assets/", fileServer))
-	http.HandleFunc("/", Index)
-	http.HandleFunc("/pay", PaymentHandler)
-	http.HandleFunc("/register", RegisterHandler)
-
-	// The default port is 500, but one can be specified as an env var if needed.
-	port := "5000"
-	if os.Getenv("PORT") != "" {
-		port = os.Getenv("PORT")
-	}
-
-	log.Printf("Starting webserver on port %s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
-}
-
-// OxipayRegistrationPayload required to register a device with Oxipay
-type OxipayRegistrationPayload struct {
-	MerchantID      string `json:"x_merchant_id"`
-	DeviceID        string `json:"x_device_id"`
-	DeviceToken     string `json:"x_device_token"`
-	OperatorID      string `json:"x_operator_id"`
-	FirmwareVersion string `json:"x_firmware_version"`
-	POSVendor       string `json:"x_pos_vendor"`
-	TrackingData    string `json:"tracking_data"`
-	Signature       string `json:"signature"`
 }
 
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
@@ -176,7 +181,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 // RegisterPosDevice is used to register a new vend terminal
 func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
 	// @todo move to configuration
-	var registerURL = "https://sandboxpos.oxipay.com.au/webapi/v1/CreateKey"
+	var registerURL = OxpayGateway + "/CreateKey"
 	var err error
 
 	jsonValue, _ := json.Marshal(payload)
@@ -231,7 +236,7 @@ func (payload *OxipayRegistrationPayload) validate() bool {
 }
 
 func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
-	var authorisationURL = "https://sandboxpos.oxipay.com.au/webapi/v1/ProcessAuthorisation"
+	var authorisationURL = OxpayGateway + "/ProcessAuthorisation"
 
 	var err error
 
@@ -342,14 +347,14 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
 
-	txnRef, err := gouuid.NewV4()
+	txnRef, err := shortid.Generate()
 
 	// send off to Oxipay
 	//var oxipayPayload
 	var oxipayPayload = &OxipayPayload{
 		DeviceID:          terminal.FxlRegisterID,
 		MerchantID:        terminal.FxlSellerID,
-		PosTransactionRef: txnRef.String(),
+		PosTransactionRef: txnRef,
 		FinanceAmount:     amount,
 		FirmwareVersion:   "vend_integration_v0.0.1",
 		OperatorID:        "Vend",
@@ -424,6 +429,48 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// https://tools.ietf.org/html/rfc7231#section-6.3.2
 	w.WriteHeader(http.StatusCreated)
 	w.Write(responseJSON)
+}
+
+func (t Terminal) save(user string) (bool, error) {
+
+	if db == nil {
+		return false, errors.New("I have no database connection")
+	}
+
+	query := `INSERT INTO 
+		oxipay_vend_map  
+		(
+			fxl_register_id,
+			fxl_seller_id,
+			fxl_device_signing_key,
+			origin_domain, 
+			vend_register_id,
+			created_by
+		) VALUES (?, ?, ?, ?, ?, ?) `
+
+	stmt, err := db.Prepare(query)
+
+	if err != nil {
+		return false, err
+	}
+
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		t.FxlRegisterID,
+		t.FxlSellerID,
+		t.FxlDeviceSigningKey,
+		t.Origin,
+		t.VendRegisterID,
+		user,
+	)
+
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+
 }
 
 func getRegisteredTerminal(origin string) (*Terminal, error) {
