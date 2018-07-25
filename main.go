@@ -64,7 +64,7 @@ type OxipayResponse struct {
 	Status         string `json:"x_status"`
 	Code           string `json:"x_code"`
 	Message        string `json:"x_message"`
-	Key            string `json:"x_key"`
+	Key            string `json:"x_key,omitempty"`
 	Signature      string `json:"signature"`
 }
 
@@ -76,7 +76,9 @@ type Response struct {
 	RegisterID   string  `json:"register_id"`
 	Status       string  `json:"status"`
 	Signature    string  `json:"signature"`
-	TrackingData string  `json:"tracking_data"`
+	TrackingData string  `json:"tracking_data,omitempty"`
+	Message      string  `json:"message,omitempty"`
+	HTTPStatus   int     `json:"-"`
 }
 
 // OxipayRegistrationPayload required to register a device with Oxipay
@@ -87,7 +89,7 @@ type OxipayRegistrationPayload struct {
 	OperatorID      string `json:"x_operator_id"`
 	FirmwareVersion string `json:"x_firmware_version"`
 	POSVendor       string `json:"x_pos_vendor"`
-	TrackingData    string `json:"tracking_data"`
+	TrackingData    string `json:"tracking_data,omitempty"`
 	Signature       string `json:"signature"`
 }
 
@@ -129,9 +131,10 @@ func connectToDatabase() {
 	// connect to the database
 	// @todo grab config
 	var err error
-	db, err = sql.Open("mysql", dsn)
 
-	//defer db.Close()
+	if db == nil {
+		db, err = sql.Open("mysql", dsn)
+	}
 
 	if err != nil {
 		log.Printf("Unable to connect")
@@ -154,24 +157,70 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 		registrationPayload := bind(r)
 
-		if registrationPayload.validate() {
+		err := registrationPayload.validate()
+
+		browserResponse := &Response{}
+
+		if err == nil {
+
 			plainText := generatePlainTextSignature(registrationPayload)
 			log.Printf("Oxipay plain text: %s", plainText)
 
 			// sign the message
 			registrationPayload.Signature = SignMessage(plainText, registrationPayload.DeviceToken)
 			log.Printf("Oxipay signature: %s", registrationPayload.Signature)
+
 			// submit to oxipay
-			response, err := RegisterPosDevice(registrationPayload)
+			response, err := registerPosDevice(registrationPayload)
 
 			if err != nil {
 				fmt.Print(err)
 			}
-			_ = response
-			// store in the database
-		}
 
+			switch response.Code {
+
+			case "SCRK01":
+				//success
+				// redirect back to transaction
+				log.Print("Device Successfully registered")
+				terminal := &Terminal{
+					FxlDeviceSigningKey: response.Key,
+					FxlRegisterID:       registrationPayload.DeviceID,
+					FxlSellerID:         registrationPayload.MerchantID, // Oxipay Merchant No
+					Origin:              r.Form.Get("Origin"),           // Vend Website
+					VendRegisterID:      r.Form.Get("VendRegisterID"),   // Vend Register ID
+				}
+
+				_, err := terminal.save("vend-proxy")
+				if err != nil {
+					log.Fatal(err)
+					browserResponse.Message = "Unable to process request"
+					browserResponse.HTTPStatus = http.StatusServiceUnavailable
+				} else {
+					browserResponse.Message = "Created"
+					browserResponse.HTTPStatus = http.StatusOK
+				}
+
+				break
+			case "FCRK01":
+				// can't find this device token
+				browserResponse.Message = fmt.Sprintf("Device token %s can't be found in the remote service", registrationPayload.DeviceToken)
+				browserResponse.HTTPStatus = http.StatusBadRequest
+				break
+			case "FCRK02":
+				// device token already used
+				browserResponse.Message = fmt.Sprintf("Device token %s has previously been registered", registrationPayload.DeviceToken)
+				browserResponse.HTTPStatus = http.StatusBadRequest
+				break
+			}
+		} else {
+			browserResponse.Message = err.Error()
+			browserResponse.HTTPStatus = http.StatusBadRequest
+		}
+		log.Print(browserResponse.Message)
+		sendResponse(w, browserResponse)
 		break
+
 	default:
 		http.ServeFile(w, r, "./assets/templates/register.html")
 	}
@@ -179,7 +228,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // RegisterPosDevice is used to register a new vend terminal
-func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
+func registerPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
 	// @todo move to configuration
 	var registerURL = OxpayGateway + "/CreateKey"
 	var err error
@@ -217,22 +266,25 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 func bind(r *http.Request) *OxipayRegistrationPayload {
 	r.ParseForm()
 
+	uniqueID, _ := shortid.Generate()
+	deviceToken := r.Form.Get("DeviceToken")
+	FxlDeviceID := deviceToken + "-" + uniqueID
+
 	register := &OxipayRegistrationPayload{
 		MerchantID:      r.Form.Get("MerchantID"),
-		DeviceID:        r.Form.Get("DeviceID"),
-		DeviceToken:     r.Form.Get("DeviceToken"),
+		DeviceID:        FxlDeviceID,
+		DeviceToken:     deviceToken,
 		OperatorID:      r.Form.Get("OperatorID"),
 		FirmwareVersion: r.Form.Get("FirmwareVersion"),
-		POSVendor:       "Vend",
-		TrackingData:    "",
+		POSVendor:       "Vend-Proxy",
 	}
 
 	return register
 }
 
-func (payload *OxipayRegistrationPayload) validate() bool {
+func (payload *OxipayRegistrationPayload) validate() error {
 
-	return true
+	return nil
 }
 
 func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
@@ -242,7 +294,7 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 
 	jsonValue, _ := json.Marshal(oxipayPayload)
 
-	fmt.Println("Registration Payload" + string(jsonValue))
+	fmt.Println("Authorisation Payload" + string(jsonValue))
 
 	client := http.Client{}
 	response, responseErr := client.Post(authorisationURL, "application/json", bytes.NewBuffer(jsonValue))
@@ -252,8 +304,9 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 		panic(responseErr)
 	}
 	defer response.Body.Close()
-	fmt.Println("response Status:", response.Status)
-	fmt.Println("response Headers:", response.Header)
+	log.Println("ProcessAuthorisation Response Status:", response.Status)
+	log.Println("ProcessAuthorisation Response Headers:", response.Header)
+	log.Println("ProcessAuthorisation Response Headers:", response.Body)
 	body, _ := ioutil.ReadAll(response.Body)
 
 	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
@@ -265,7 +318,7 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 		return nil, err
 	}
 
-	fmt.Println("response Body:", oxipayResponse)
+	log.Println("Unmarshalled Oxipay Response Body:", oxipayResponse)
 	return oxipayResponse, err
 }
 
@@ -339,11 +392,12 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// looks up the database to get the fake Oxipay terminal
 	// so that we can issue this against Oxipay
 
-	terminal, err := getRegisteredTerminal(origin)
+	terminal, err := getRegisteredTerminal(origin, registerID)
 
-	if err == nil {
+	if err != nil {
 		// redirect
 		http.Redirect(w, r, "/register", 302)
+		return
 	}
 	log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
 
@@ -393,6 +447,13 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		status = statusCancelled
 	case "FPRA99":
 		status = statusDeclined
+	case "EAUT01":
+		// tried to process with an unknown terminal
+		// needs registration
+		// should we remove from mapping ? then redirect ?
+		// need to think this through as we need to authenticate them first otherwise you
+		// can remove other peoples transactions
+		status = statusFailed
 	case "FAIL":
 		status = statusFailed
 	case "TIMEOUT":
@@ -407,28 +468,25 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Build our response content, including the amount approved and the Vend
 	// register that originally sent the payment.
-	response := Response{
+	response := &Response{
 		ID:         shortID,
 		Amount:     amountFloat,
 		Status:     status,
 		RegisterID: registerID,
 	}
 
-	// Marshal our response into JSON.
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		log.Println("failed to marshal response json: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	sendResponse(w, response)
+
+}
+
+func newNullString(s string) sql.NullString {
+	if len(s) == 0 {
+		return sql.NullString{}
 	}
-
-	log.Printf("Response: %s", responseJSON)
-
-	// Respond with status created (201), as we are returning a description of
-	// the created object, rather than a representation of it.
-	// https://tools.ietf.org/html/rfc7231#section-6.3.2
-	w.WriteHeader(http.StatusCreated)
-	w.Write(responseJSON)
+	return sql.NullString{
+		String: s,
+		Valid:  true,
+	}
 }
 
 func (t Terminal) save(user string) (bool, error) {
@@ -457,12 +515,12 @@ func (t Terminal) save(user string) (bool, error) {
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		t.FxlRegisterID,
-		t.FxlSellerID,
-		t.FxlDeviceSigningKey,
-		t.Origin,
-		t.VendRegisterID,
-		user,
+		newNullString(t.FxlRegisterID),
+		newNullString(t.FxlSellerID),
+		newNullString(t.FxlDeviceSigningKey),
+		newNullString(t.Origin),
+		newNullString(t.VendRegisterID),
+		newNullString(user),
 	)
 
 	if err != nil {
@@ -473,7 +531,11 @@ func (t Terminal) save(user string) (bool, error) {
 
 }
 
-func getRegisteredTerminal(origin string) (*Terminal, error) {
+func getRegisteredTerminal(origin string, vendRegisterID string) (*Terminal, error) {
+
+	if db == nil {
+		return nil, errors.New("I have no database connection")
+	}
 
 	sql := `SELECT 
 			 fxl_register_id, 
@@ -481,9 +543,15 @@ func getRegisteredTerminal(origin string) (*Terminal, error) {
 			 fxl_device_signing_key, 
 			 origin_domain,
 			 vend_register_id
-			FROM oxipay_vend_map WHERE origin_domain = ? AND 1=1`
+			FROM 
+				oxipay_vend_map 
+			WHERE 
+				origin_domain = ? 
+			AND
+				vend_register_id = ? 
+			AND 1=1`
 
-	rows, err := db.Query(sql, origin)
+	rows, err := db.Query(sql, origin, vendRegisterID)
 
 	if err != nil {
 		log.Fatal(err)
@@ -492,7 +560,6 @@ func getRegisteredTerminal(origin string) (*Terminal, error) {
 	var terminal = new(Terminal)
 	noRows := 0
 
-	// @todo error if it can't find the terminal
 	for rows.Next() {
 		noRows++
 		var err = rows.Scan(
@@ -505,9 +572,6 @@ func getRegisteredTerminal(origin string) (*Terminal, error) {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		// Outputs: map[columnName:value columnName2:value2 columnName3:value3 ...]
-		// fmt.Print(terminal)
 	}
 
 	if noRows < 1 {
@@ -515,6 +579,21 @@ func getRegisteredTerminal(origin string) (*Terminal, error) {
 	}
 
 	return terminal, nil
+}
+
+func sendResponse(w http.ResponseWriter, response *Response) {
+
+	// Marshal our response into JSON.
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		log.Println("failed to marshal response json: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Response: %s", responseJSON)
+	w.WriteHeader(response.HTTPStatus)
+	w.Write(responseJSON)
 }
 
 //
