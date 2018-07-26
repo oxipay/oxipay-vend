@@ -14,6 +14,9 @@ import (
 func TestMain(m *testing.M) {
 	// we need a database connection for most of the tests
 	connectToDatabase()
+	// OxpayGateway = "https://testpos.oxipay.com.au/webapi/v1/Test"
+	OxpayGateway = "https://sandboxpos.oxipay.com.au/webapi/v1"
+
 	returnCode := m.Run()
 	db.Close()
 	os.Exit(returnCode)
@@ -22,7 +25,6 @@ func TestMain(m *testing.M) {
 // TestTerminalSave tests saving a new terminal in the database for the registration phase
 func TestTerminalSave(t *testing.T) {
 	// { Success SCRK01 Success VK5NGgc7nFJp 481f1e4098465f5229b33d91e0687c6123b91078e5c727b6d8ebf9360af145e7}
-
 	var uniqueID, _ = shortid.Generate()
 
 	terminal := &Terminal{
@@ -70,7 +72,7 @@ func TestRegisterHandler(t *testing.T) {
 	form.Add("FirmwareVersion", "1.0")
 
 	form.Add("VendRegisterID", "13f35d8e-a5cf-4df1-b3af-79f045bb3c50")
-	form.Add("DeviceToken", "sczkKBAFH8tw") // for this to work against sandbox or prod it needs a real token
+	form.Add("DeviceToken", "8HhlueaYDNQr") // for this to work against sandbox or prod it needs a real token
 	form.Add("OperatorID", "Vend")
 
 	req, err := http.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
@@ -89,7 +91,7 @@ func TestRegisterHandler(t *testing.T) {
 
 	// Check the status code is what we expect.
 	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
+		t.Errorf("handler returned wrong status code: got %d want %d",
 			status, http.StatusOK)
 	}
 }
@@ -103,7 +105,7 @@ func TestProcessAuthorisationHandler(t *testing.T) {
 	form := url.Values{}
 	form.Add("amount", "4400")
 	form.Add("origin", "http://pos.oxipay.com.au")
-	form.Add("paymentcode", "017126") // needs a real payment code to succeed
+	form.Add("paymentcode", "01333333") // needs a real payment code to succeed
 	form.Add("register_id", "13f35d8e-a5cf-4df1-b3af-79f045bb3c50")
 
 	req, err := http.NewRequest(http.MethodPost, "/pay", strings.NewReader(form.Encode()))
@@ -122,8 +124,9 @@ func TestProcessAuthorisationHandler(t *testing.T) {
 
 	// Check the status code is what we expect.
 	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
+		t.Errorf("handler returned wrong status code: got %d want %d",
 			status, http.StatusOK)
+		return
 	}
 
 	// Check the response body is what we expect.

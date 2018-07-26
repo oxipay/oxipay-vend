@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"reflect"
-	"strconv"
 
 	// "time"s
 	_ "crypto/hmac"
@@ -22,6 +21,7 @@ import (
 	"database/sql"
 	"sort"
 
+	colour "github.com/bclicn/color"
 	_ "github.com/go-sql-driver/mysql"
 	shortid "github.com/ventu-io/go-shortid"
 )
@@ -71,14 +71,14 @@ type OxipayResponse struct {
 // Response We build a JSON response object that contains important information for
 // which step we should send back to Vend to guide the payment flow.
 type Response struct {
-	ID           string  `json:"id"`
-	Amount       float64 `json:"amount"`
-	RegisterID   string  `json:"register_id"`
-	Status       string  `json:"status"`
-	Signature    string  `json:"signature"`
-	TrackingData string  `json:"tracking_data,omitempty"`
-	Message      string  `json:"message,omitempty"`
-	HTTPStatus   int     `json:"-"`
+	ID           string `json:"id"`
+	Amount       string `json:"amount"`
+	RegisterID   string `json:"register_id"`
+	Status       string `json:"status"`
+	Signature    string `json:"signature"`
+	TrackingData string `json:"tracking_data,omitempty"`
+	Message      string `json:"message,omitempty"`
+	HTTPStatus   int    `json:"-"`
 }
 
 // OxipayRegistrationPayload required to register a device with Oxipay
@@ -114,8 +114,11 @@ func main() {
 		port = os.Getenv("PORT")
 	}
 
-	log.Printf("Starting webserver on port %s", port)
+	log.Printf("Starting webserver on port %s \n", port)
+
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+
+	// @todo handle shutdowns
 }
 
 func connectToDatabase() {
@@ -126,7 +129,7 @@ func connectToDatabase() {
 	dbName := "vend"
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", dbUser, dbPassword, host, dbName)
 
-	log.Printf("Attempting to connect to database %s \n", dsn)
+	log.Printf(colour.BLightBlue("Attempting to connect to database %s \n"), dsn)
 
 	// connect to the database
 	// @todo grab config
@@ -137,13 +140,13 @@ func connectToDatabase() {
 	}
 
 	if err != nil {
-		log.Printf("Unable to connect")
+		log.Printf(colour.Red("Unable to connect"))
 		log.Fatal(err)
 	}
 
 	// test to make sure it's all good
 	if err := db.Ping(); err != nil {
-		log.Printf("Unable to connect to %s", dbName)
+		log.Printf(colour.Red("Unable to connect to %s"), dbName)
 		log.Fatal(err)
 	}
 
@@ -162,19 +165,25 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		browserResponse := &Response{}
 
 		if err == nil {
-
+			// @todo move to separate function
 			plainText := generatePlainTextSignature(registrationPayload)
-			log.Printf("Oxipay plain text: %s", plainText)
+			log.Printf(colour.BLightYellow("Oxipay Plain Text: %s \n"), plainText)
 
 			// sign the message
 			registrationPayload.Signature = SignMessage(plainText, registrationPayload.DeviceToken)
-			log.Printf("Oxipay signature: %s", registrationPayload.Signature)
+			log.Printf(colour.BLightYellow("Oxipay Signature: %s \n"), registrationPayload.Signature)
 
 			// submit to oxipay
 			response, err := registerPosDevice(registrationPayload)
 
 			if err != nil {
-				fmt.Print(err)
+
+				log.Println(err)
+				msg := "We are unable to process this request "
+				log.Println(msg, err)
+				w.WriteHeader(http.StatusBadGateway)
+				w.Write([]byte(msg))
+				return
 			}
 
 			switch response.Code {
@@ -212,6 +221,11 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				browserResponse.Message = fmt.Sprintf("Device token %s has previously been registered", registrationPayload.DeviceToken)
 				browserResponse.HTTPStatus = http.StatusBadRequest
 				break
+
+			case "EISE01":
+				browserResponse.Message = fmt.Sprintf("Oxipay Internal Server error for device: %s", registrationPayload.DeviceToken)
+				browserResponse.HTTPStatus = http.StatusBadGateway
+				break
 			}
 		} else {
 			browserResponse.Message = err.Error()
@@ -235,7 +249,8 @@ func registerPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 
 	jsonValue, _ := json.Marshal(payload)
 
-	fmt.Println(string(jsonValue))
+	log.Println(colour.BLightPurple("POST to URL %s"), registerURL)
+	log.Println(colour.BLightPurple("Register POS Device Payload:" + string(jsonValue)))
 
 	client := http.Client{}
 	response, responseErr := client.Post(registerURL, "application/json", bytes.NewBuffer(jsonValue))
@@ -245,9 +260,10 @@ func registerPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 		panic(responseErr)
 	}
 	defer response.Body.Close()
-	fmt.Println("response Status:", response.Status)
-	fmt.Println("response Headers:", response.Header)
+	log.Println("Register Response Status:", response.Status)
+	log.Println("Register Response Headers:", response.Header)
 	body, _ := ioutil.ReadAll(response.Body)
+	log.Printf(colour.BGreen("ProcessAuthorisation Response Body: \n %v"), string(body))
 
 	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
 	// into a struct
@@ -255,10 +271,11 @@ func registerPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 	err = json.Unmarshal(body, oxipayResponse)
 
 	if err != nil {
-		return nil, err
+		log.Println(err)
+		return nil, errors.New("Unable to unmarshall response from server")
 	}
 
-	fmt.Println("response Body:", oxipayResponse)
+	log.Printf(colour.BGreen("Unmarshalled Register POS Response Body: %s \n"), oxipayResponse)
 	return oxipayResponse, err
 
 }
@@ -293,8 +310,8 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 	var err error
 
 	jsonValue, _ := json.Marshal(oxipayPayload)
-
-	fmt.Println("Authorisation Payload" + string(jsonValue))
+	log.Println(colour.BLightPurple("POST to URL %s"), authorisationURL)
+	log.Println(colour.BLightPurple("Authorisation Payload: " + string(jsonValue)))
 
 	client := http.Client{}
 	response, responseErr := client.Post(authorisationURL, "application/json", bytes.NewBuffer(jsonValue))
@@ -306,8 +323,9 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 	defer response.Body.Close()
 	log.Println("ProcessAuthorisation Response Status:", response.Status)
 	log.Println("ProcessAuthorisation Response Headers:", response.Header)
-	log.Println("ProcessAuthorisation Response Headers:", response.Body)
+
 	body, _ := ioutil.ReadAll(response.Body)
+	log.Printf(colour.BGreen("ProcessAuthorisation Response Body: \n %v"), string(body))
 
 	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
 	// into a struct
@@ -318,13 +336,47 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 		return nil, err
 	}
 
-	log.Println("Unmarshalled Oxipay Response Body:", oxipayResponse)
+	log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
 	return oxipayResponse, err
+}
+
+type vendPaymentRequest struct {
+	amount     string
+	origin     string
+	code       string
+	registerID string
 }
 
 // Index displays the main payment processing page, giving the user options of
 // which outcome they would like the Pay Example to simulate.
 func Index(w http.ResponseWriter, r *http.Request) {
+
+	r.ParseForm()
+	origin := r.Form.Get("origin")
+	origin, _ = url.PathUnescape(origin)
+
+	vReq := &vendPaymentRequest{
+		amount:     r.Form.Get("amount"),
+		origin:     origin,
+		registerID: r.Form.Get("register_id"),
+	}
+
+	log.Printf("Received %s from %s for register %s", vReq.amount, vReq.origin, vReq.registerID)
+
+	if err := validPaymentRequest(vReq); err != nil {
+		w.Write([]byte("Not a valid request"))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	// we just want to ensure there is a terminal available
+	_, err := getRegisteredTerminal(vReq.origin, vReq.registerID)
+
+	if err != nil {
+		// redirect
+		http.Redirect(w, r, "/register", 302)
+		return
+	}
+
 	http.ServeFile(w, r, "./assets/templates/index.html")
 }
 
@@ -339,47 +391,23 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// "register_id" is the ID of the Vend register that sent the transaction.
 	// "outcome" is the desired outcome of the payment flow.
 	r.ParseForm()
-	amount := r.Form.Get("amount")
-	outcome := r.Form.Get("outcome") // IMPORTANT: this only applies to this package and is never sent in production.
 	origin := r.Form.Get("origin")
-	origin, _ = url.PathUnescape(origin) // @todo, do we care about errors , we should validate?
-	code := r.Form.Get("paymentcode")
+	origin, _ = url.PathUnescape(origin)
 
-	registerID := r.Form.Get("register_id")
+	vReq := &vendPaymentRequest{
+		amount:     r.Form.Get("amount"),
+		origin:     origin,
+		code:       r.Form.Get("paymentcode"),
+		registerID: r.Form.Get("register_id"),
+	}
 
-	// Reject requests with required arguments that are empty. By default Vend
-	// on both Web and iOS will always send at least amount and origin values.
-	// The "DATA" step can be used to obtain extra details like register_id,
-	// that should be used to associate a register with a payment terminal.
-	if amount == "" || origin == "" {
-		log.Printf("received empty param value. required: amount %s origin %s optional: register_id %s outcome %s", amount, origin, registerID, outcome)
+	log.Printf("Received %s from %s for register %s", vReq.amount, vReq.origin, vReq.registerID)
+
+	if err := validPaymentRequest(vReq); err != nil {
+		w.Write([]byte("Not a valid request"))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
-	log.Printf("RegisterID is %s ", registerID)
-
-	// If no outcome was specified, then just follow the happy transaction flow.
-	if outcome == "" {
-		outcome = statusAccepted
-	}
-
-	// Convert the amount string to a float.
-	amountFloat, err := strconv.ParseFloat(amount, 64)
-	if err != nil {
-		log.Println("failed to convert amount string to float: ", err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	// Reject zero amounts.
-	if amountFloat == 0 {
-		log.Println("zero amount received")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("Received %f from %s for register %s", amountFloat, origin, registerID)
 
 	//
 	// To suggest this, we simulate waiting for a payment completion for a few
@@ -392,7 +420,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// looks up the database to get the fake Oxipay terminal
 	// so that we can issue this against Oxipay
 
-	terminal, err := getRegisteredTerminal(origin, registerID)
+	terminal, err := getRegisteredTerminal(vReq.origin, vReq.registerID)
 
 	if err != nil {
 		// redirect
@@ -409,23 +437,23 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		DeviceID:          terminal.FxlRegisterID,
 		MerchantID:        terminal.FxlSellerID,
 		PosTransactionRef: txnRef,
-		FinanceAmount:     amount,
+		FinanceAmount:     vReq.amount,
 		FirmwareVersion:   "vend_integration_v0.0.1",
 		OperatorID:        "Vend",
-		PurchaseAmount:    amount,
-		PreApprovalCode:   code,
+		PurchaseAmount:    vReq.amount,
+		PreApprovalCode:   vReq.code,
 	}
 
 	// generate the plaintext for the signature
 	plainText := generatePlainTextSignature(oxipayPayload)
-	log.Printf("Oxipay plain text: %s", plainText)
+	log.Printf("Oxipay plain text: %s \n", plainText)
 
 	// sign the message
 	oxipayPayload.Signature = SignMessage(plainText, terminal.FxlDeviceSigningKey)
-	log.Printf("Oxipay signature: %s", oxipayPayload.Signature)
+	log.Printf("Oxipay signature: %s \n", oxipayPayload.Signature)
 
 	// use
-	log.Printf("Use the following payload for Oxipay: %v", oxipayPayload)
+	log.Printf("Use the following payload for Oxipay: %v \n", oxipayPayload)
 
 	// Here is the point where you have all the information you need to send a
 	// request to your payment gateway or terminal to process the transaction
@@ -436,43 +464,49 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, "There was a problem processing the request", 500)
+		// log the raw response
+		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
+		log.Printf(colour.Red(msg))
+		return
 	}
 
-	// @todo this needs to line up better
-	var status string
+	// Specify an external transaction ID. This value can be sent back to Vend with
+	// the "ACCEPT" step as the JSON key "transaction_id".
+	// shortID, _ := shortid.Generate()
+
+	// Build our response content, including the amount approved and the Vend
+	// register that originally sent the payment.
+	response := &Response{}
+
 	switch oxipayResponse.Code {
 	case "SPRA01":
-		status = statusAccepted
+		response.Amount = oxipayPayload.PurchaseAmount
+		response.ID = oxipayResponse.PurchaseNumber
+		response.Status = statusAccepted
+		response.HTTPStatus = http.StatusOK
 	case "CANCEL":
-		status = statusCancelled
+		response.Status = statusCancelled
+		response.HTTPStatus = http.StatusOK
 	case "FPRA99":
-		status = statusDeclined
+		response.Status = statusDeclined
+		response.HTTPStatus = http.StatusOK
 	case "EAUT01":
 		// tried to process with an unknown terminal
 		// needs registration
 		// should we remove from mapping ? then redirect ?
 		// need to think this through as we need to authenticate them first otherwise you
 		// can remove other peoples transactions
-		status = statusFailed
+		response.Status = statusFailed
+		response.HTTPStatus = http.StatusOK
 	case "FAIL":
-		status = statusFailed
+		response.Status = statusFailed
+		response.HTTPStatus = http.StatusOK
 	case "TIMEOUT":
-		status = statusTimeout
+		response.Status = statusTimeout
+		response.HTTPStatus = http.StatusOK
 	default:
-		status = statusUnknown
-	}
-
-	// Specify an external transaction ID. This value can be sent back to Vend with
-	// the "ACCEPT" step as the JSON key "transaction_id".
-	shortID, _ := shortid.Generate()
-
-	// Build our response content, including the amount approved and the Vend
-	// register that originally sent the payment.
-	response := &Response{
-		ID:         shortID,
-		Amount:     amountFloat,
-		Status:     status,
-		RegisterID: registerID,
+		response.Status = statusUnknown
+		response.HTTPStatus = http.StatusOK
 	}
 
 	sendResponse(w, response)
@@ -591,7 +625,7 @@ func sendResponse(w http.ResponseWriter, response *Response) {
 		return
 	}
 
-	log.Printf("Response: %s", responseJSON)
+	log.Printf("Response: %s \n", responseJSON)
 	w.WriteHeader(response.HTTPStatus)
 	w.Write(responseJSON)
 }
@@ -618,11 +652,7 @@ func generatePlainTextSignature(payload interface{}) string {
 		tag := ftype.Tag.Get("json")
 		payloadList[tag] = data.(string)
 
-		// fmt.Printf("data %v : %v \n\n", tag, data)
 	}
-
-	fmt.Print(payloadList)
-
 	var keys []string
 	for k := range payloadList {
 		keys = append(keys, k)
@@ -639,6 +669,11 @@ func generatePlainTextSignature(payload interface{}) string {
 	}
 
 	return buffer.String()
+}
+
+func validPaymentRequest(req *vendPaymentRequest) error {
+
+	return nil
 }
 
 // SignMessage will generate an HMAC of the plaintext

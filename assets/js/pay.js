@@ -309,7 +309,7 @@ $(function () {
   console.log('setting up')
 //  setupStep()
 
-  $('#statusMessage').empty()
+  //$('#statusMessage').empty()
   $.get('../assets/templates/waiting.html', function (data) {
     $('#statusMessage').append(data)
   })
