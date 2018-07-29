@@ -305,9 +305,10 @@ function seeForm() {
 // close button and setting the header.
 $(function () {
   debugger
+  console.log("in here");
   // Send the SETUP step with our configuration values..
   console.log('setting up')
-//  setupStep()
+  setupStep()
 
   //$('#statusMessage').empty()
   $.get('../assets/templates/waiting.html', function (data) {
