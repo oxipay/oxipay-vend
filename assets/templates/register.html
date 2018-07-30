@@ -10,7 +10,7 @@
     />
     <script src="/assets/js/jquery-3.1.0.min.js" crossorigin="anonymous"></script>
 
-    <script src="/assets/js/pay.js"></script>
+    <!-- <script src="/assets/js/pay.js"></script> -->
 </head>
 
 <div class="container center">
@@ -24,23 +24,19 @@
 
 
         <div class="form-group">
-
-            <form action=" " method="POST" id="paymentform">
+            <form action="/register" method="POST" id="paymentform" enctype="application/x-www-form-urlencoded">
                 <div class="form-group">
                     <label for="MerchantID" class="form-check-label">Merchant ID</label>
                     <input  name="MerchantID" id="MerchantID" class="form-control" />
                 </div>
                 <div class="form-group">
                     <label for="paymentcode" class="form-check-label">Device Token</label>
-                    <input  name="DeviceID" id="DeviceID" class="form-control" />
+                    <input  name="DeviceToken" id="DeviceToken" class="form-control" />
                 </div>
                 <div>
                         <input type="submit" class="vd-button vd-button--primary" value="Register"  />
                         <input type="submit" class="vd-button vd-button--secondary" value="Cancel" />
-                </div>
-                
-    
-    
+                </div>                
             </form>
         </div>
         <hr>
