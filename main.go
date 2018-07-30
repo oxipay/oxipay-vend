@@ -11,9 +11,11 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"reflect"
+	"strconv"
 
 	// "time"s
 	_ "crypto/hmac"
@@ -185,14 +187,15 @@ func connectToDatabase() *sql.DB {
 
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	logRequest(r)
+	// logRequest(r)
 
 	switch r.Method {
 	case http.MethodPost:
 
 		registrationPayload, err := bind(r)
 		if err != nil {
-			w.WriteHeader(http.StatusBadGateway)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		err = registrationPayload.validate()
@@ -224,6 +227,26 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 			switch response.Code {
 
 			case "SCRK01":
+
+				// We get the Device Token from the
+				session, err := SessionStore.Get(r, "oxipay")
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				val := session.Values["vReq"]
+				//val := session.Values["origin"]
+				//vReq, ok := val.(string)
+				var vendPaymentRequest = VendPaymentRequest{}
+				vendPaymentRequest, ok := val.(VendPaymentRequest)
+
+				if !ok {
+					_ = vendPaymentRequest
+					log.Println("Can't get vReq from session")
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+
 				//success
 				// redirect back to transaction
 				log.Print("Device Successfully registered")
@@ -231,11 +254,11 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 					FxlDeviceSigningKey: response.Key,
 					FxlRegisterID:       registrationPayload.DeviceID,
 					FxlSellerID:         registrationPayload.MerchantID, // Oxipay Merchant No
-					Origin:              r.Form.Get("Origin"),           // Vend Website
-					VendRegisterID:      r.Form.Get("VendRegisterID"),   // Vend Register ID
+					Origin:              vendPaymentRequest.Origin,      // Vend Website
+					VendRegisterID:      vendPaymentRequest.RegisterID,  // Vend Register ID
 				}
 
-				_, err := terminal.save("vend-proxy")
+				_, err = terminal.save("vend-proxy")
 				if err != nil {
 					log.Fatal(err)
 					browserResponse.Message = "Unable to process request"
@@ -244,8 +267,8 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 					browserResponse.Message = "Created"
 					browserResponse.HTTPStatus = http.StatusOK
 				}
-
-				break
+				// serve up the success page
+				http.ServeFile(w, r, "./assets/templates/register_success.html")
 			case "FCRK01":
 				// can't find this device token
 				browserResponse.Message = fmt.Sprintf("Device token %s can't be found in the remote service", registrationPayload.DeviceToken)
@@ -317,36 +340,19 @@ func registerPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 }
 
 func bind(r *http.Request) (*OxipayRegistrationPayload, error) {
-	r.ParseForm()
 
+	if err := r.ParseForm(); err != nil {
+		log.Fatalf("Error parsing form: %s", err)
+		return nil, err
+	}
 	uniqueID, _ := shortid.Generate()
 	deviceToken := r.Form.Get("DeviceToken")
+	merchantID := r.Form.Get("MerchantID")
+
 	FxlDeviceID := deviceToken + "-" + uniqueID
 
-	// We get the Device Token from the
-	session, err := SessionStore.Get(r, "oxipay")
-	if err != nil {
-		return nil, err
-	}
-	val := session.Values["vReq"]
-	//val := session.Values["origin"]
-	//vReq, ok := val.(string)
-	var vendPaymentRequest = VendPaymentRequest{}
-	vendPaymentRequest, ok := val.(VendPaymentRequest)
-
-	if !ok {
-		_ = vendPaymentRequest
-		// Handle the case that it's not an expected type
-		log.Println(colour.Red("Can't get vReq from session"))
-
-		return nil, err
-	}
-
-	log.Printf(colour.BLightBlue("SESSION: %v \n"), ok)
-	log.Printf(colour.BLightBlue("SESSION: %v \n"), vendPaymentRequest)
-
 	register := &OxipayRegistrationPayload{
-		MerchantID:      r.Form.Get("MerchantID"),
+		MerchantID:      merchantID,
 		DeviceID:        FxlDeviceID,
 		DeviceToken:     deviceToken,
 		OperatorID:      "unknown",
@@ -358,6 +364,10 @@ func bind(r *http.Request) (*OxipayRegistrationPayload, error) {
 }
 
 func (payload *OxipayRegistrationPayload) validate() error {
+
+	if payload == nil {
+		return errors.New("payload is empty")
+	}
 
 	return nil
 }
@@ -399,11 +409,15 @@ func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 }
 
 func logRequest(r *http.Request) {
+	dump, _ := httputil.DumpRequest(r, true)
+	log.Printf("%q ", dump)
+	// if r.Body != nil {
+	// 	// we need to copy the bytes out of the buffer
+	// 	// we we can inspect the contents without draining the buffer
 
-	if r.Body != nil {
-		body, _ := ioutil.ReadAll(r.Body)
-		log.Printf(colour.GDarkGray("Body: %s \n"), body)
-	}
+	// 	body, _ := ioutil.ReadAll(r.Body)
+	// 	log.Printf(colour.GDarkGray("Body: %s \n"), body)
+	// }
 	if r.RequestURI != "" {
 		query := r.RequestURI
 		log.Println(colour.GDarkGray("Query " + query))
@@ -442,8 +456,9 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Received %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
+	vReq, err = validPaymentRequest(vReq)
 
-	if err := validPaymentRequest(vReq); err != nil {
+	if err != nil {
 		w.Write([]byte("Not a valid request"))
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -496,8 +511,8 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Received %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
-
-	if err := validPaymentRequest(vReq); err != nil {
+	vReq, err := validPaymentRequest(vReq)
+	if err != nil {
 		w.Write([]byte("Not a valid request"))
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -576,14 +591,23 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	case "SPRA01":
 		response.Amount = oxipayPayload.PurchaseAmount
 		response.ID = oxipayResponse.PurchaseNumber
+		response.RegisterID = terminal.VendRegisterID
 		response.Status = statusAccepted
 		response.HTTPStatus = http.StatusOK
+		break
 	case "CANCEL":
 		response.Status = statusCancelled
 		response.HTTPStatus = http.StatusOK
+		break
+	case "ESIG01":
+		// oxipay signature mismatch
+		response.Status = statusFailed
+		response.HTTPStatus = http.StatusOK
+		break
 	case "FPRA99":
 		response.Status = statusDeclined
 		response.HTTPStatus = http.StatusOK
+		break
 	case "EAUT01":
 		// tried to process with an unknown terminal
 		// needs registration
@@ -592,15 +616,19 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		// can remove other peoples transactions
 		response.Status = statusFailed
 		response.HTTPStatus = http.StatusOK
+		break
 	case "FAIL":
 		response.Status = statusFailed
 		response.HTTPStatus = http.StatusOK
+		break
 	case "TIMEOUT":
 		response.Status = statusTimeout
 		response.HTTPStatus = http.StatusOK
+		break
 	default:
 		response.Status = statusUnknown
 		response.HTTPStatus = http.StatusOK
+		break
 	}
 
 	sendResponse(w, response)
@@ -739,8 +767,11 @@ func generatePlainTextSignature(payload interface{}) string {
 	// go intentionally randomises maps so we need to
 	// store the keys in an array which we can sort
 	v := reflect.TypeOf(payload).Elem()
-	x := reflect.ValueOf(payload).Elem()
-	fmt.Print(x.NumField())
+	y := reflect.ValueOf(payload)
+	if y.IsNil() {
+		return ""
+	}
+	x := y.Elem()
 
 	payloadList := make(map[string]string, x.NumField())
 
@@ -762,7 +793,7 @@ func generatePlainTextSignature(payload interface{}) string {
 	for _, v := range keys {
 		// there shouldn't be any nil values
 		// Signature needs to be populated with the actual HMAC
-		// call
+		// calld
 		if v[0:2] == "x_" {
 			buffer.WriteString(fmt.Sprintf("%s%s", v, payloadList[v]))
 		}
@@ -771,9 +802,16 @@ func generatePlainTextSignature(payload interface{}) string {
 	return buffer.String()
 }
 
-func validPaymentRequest(req *VendPaymentRequest) error {
+func validPaymentRequest(req *VendPaymentRequest) (*VendPaymentRequest, error) {
 
-	return nil
+	// convert the amount to cents and then go back to a string for
+	// the checksum
+	amountFloat, err := strconv.ParseFloat(req.Amount, 64)
+	if err != nil {
+		log.Println("failed to convert amount string to float: ", err)
+	}
+	req.Amount = strconv.FormatFloat((amountFloat * 100), 'f', 0, 64)
+	return req, err
 }
 
 // SignMessage will generate an HMAC of the plaintext
