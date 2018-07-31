@@ -80,7 +80,7 @@ type Response struct {
 	Amount       string `json:"amount"`
 	RegisterID   string `json:"register_id"`
 	Status       string `json:"status"`
-	Signature    string `json:"signature"`
+	Signature    string `json:"-"`
 	TrackingData string `json:"tracking_data,omitempty"`
 	Message      string `json:"message,omitempty"`
 	HTTPStatus   int    `json:"-"`
