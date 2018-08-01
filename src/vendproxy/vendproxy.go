@@ -1,10 +1,8 @@
-// package main is a simple webservice for hosting Pay Example flow screens.
-package main
+// package vendproxy
+package vendproxy
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,9 +15,9 @@ import (
 	"reflect"
 	"strconv"
 
+	"./oxipay"
 	// "time"s
 	_ "crypto/hmac"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/gob"
 	"sort"
@@ -27,6 +25,7 @@ import (
 	colour "github.com/bclicn/color"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
+	"github.com/vend/peg/src/vendproxy/vend"
 
 	shortid "github.com/ventu-io/go-shortid"
 )
@@ -41,38 +40,6 @@ const (
 	statusUnknown   = "UNKNOWN"
 )
 
-// Terminal terminal mapping
-type Terminal struct {
-	FxlRegisterID       string // Oxipay registerid
-	FxlSellerID         string
-	FxlDeviceSigningKey string
-	Origin              string
-	VendRegisterID      string
-}
-
-// OxipayPayload Payload used to send to Oxipay
-type OxipayPayload struct {
-	MerchantID        string `json:"x_merchant_id"`
-	DeviceID          string `json:"x_device_id"`
-	OperatorID        string `json:"x_operator_id"`
-	FirmwareVersion   string `json:"x_firmware_version"`
-	PosTransactionRef string `json:"x_pos_transaction_ref"`
-	PreApprovalCode   string `json:"x_pre_approval_code"`
-	FinanceAmount     string `json:"x_finance_amount"`
-	PurchaseAmount    string `json:"x_purchase_amount"`
-	Signature         string `json:"signature"`
-}
-
-// OxipayResponse is the response returned from Oxipay for both a CreateKey and Sales Adjustment
-type OxipayResponse struct {
-	PurchaseNumber string `json:"x_purchase_number"`
-	Status         string `json:"x_status"`
-	Code           string `json:"x_code"`
-	Message        string `json:"x_message"`
-	Key            string `json:"x_key,omitempty"`
-	Signature      string `json:"signature"`
-}
-
 // Response We build a JSON response object that contains important information for
 // which step we should send back to Vend to guide the payment flow.
 type Response struct {
@@ -86,40 +53,16 @@ type Response struct {
 	HTTPStatus   int    `json:"-"`
 }
 
-// OxipayRegistrationPayload required to register a device with Oxipay
-type OxipayRegistrationPayload struct {
-	MerchantID      string `json:"x_merchant_id"`
-	DeviceID        string `json:"x_device_id"`
-	DeviceToken     string `json:"x_device_token"`
-	OperatorID      string `json:"x_operator_id"`
-	FirmwareVersion string `json:"x_firmware_version"`
-	POSVendor       string `json:"x_pos_vendor"`
-	TrackingData    string `json:"tracking_data,omitempty"`
-	Signature       string `json:"signature"`
-}
-
-// VendPaymentRequest is the originating request from vend
-type VendPaymentRequest struct {
-	Amount     string
-	Origin     string
-	RegisterID string
-	code       string
-}
-
-// OxpayGateway Default URL for the Oxipay Gateway @todo get from config
-var OxpayGateway = "https://testpos.oxipay.com.au/webapi/v1/"
-
 // @todo load from config
 /// var SessionStore *mysqlstore.MySQLStore
 
 // SessionStore store of session data
 var SessionStore *sessions.FilesystemStore
 
-var db *sql.DB
-
 func main() {
 
-	db = connectToDatabase()
+	_ = oxipay.Ping()
+	oxipay.Db = connectToDatabase()
 
 	var err error
 	// SessionStore, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte("@todo_change_me"))
@@ -128,7 +71,7 @@ func main() {
 	_ = SessionStore
 
 	// register the type VendPaymentRequest so that we can use it later in the session
-	gob.Register(VendPaymentRequest{})
+	gob.Register(vend.VendPaymentRequest{})
 
 	// We are hosting all of the content in ./assets, as the resources are
 	// required by the frontend.
@@ -237,8 +180,8 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				val := session.Values["vReq"]
 				//val := session.Values["origin"]
 				//vReq, ok := val.(string)
-				var vendPaymentRequest = VendPaymentRequest{}
-				vendPaymentRequest, ok := val.(VendPaymentRequest)
+				var vendPaymentRequest = vend.VendPaymentRequest{}
+				vendPaymentRequest, ok := val.(vend.VendPaymentRequest)
 
 				if !ok {
 					_ = vendPaymentRequest
@@ -300,46 +243,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// registerPosDevice is used to register a new vend terminal
-func registerPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
-	// @todo move to configuration
-	var registerURL = OxpayGateway + "/CreateKey"
-	var err error
-
-	jsonValue, _ := json.Marshal(payload)
-
-	log.Println(colour.BLightPurple("POST to URL %s"), registerURL)
-	log.Println(colour.BLightPurple("Register POS Device Payload:" + string(jsonValue)))
-
-	client := http.Client{}
-	response, responseErr := client.Post(registerURL, "application/json", bytes.NewBuffer(jsonValue))
-
-	// response, responseErr := client.Do(request)
-	if responseErr != nil {
-		panic(responseErr)
-	}
-	defer response.Body.Close()
-	log.Println("Register Response Status:", response.Status)
-	log.Println("Register Response Headers:", response.Header)
-	body, _ := ioutil.ReadAll(response.Body)
-	log.Printf(colour.BGreen("ProcessAuthorisation Response Body: \n %v"), string(body))
-
-	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
-	// into a struct
-	oxipayResponse := new(OxipayResponse)
-	err = json.Unmarshal(body, oxipayResponse)
-
-	if err != nil {
-		log.Println(err)
-		return nil, errors.New("Unable to unmarshall response from server")
-	}
-
-	log.Printf(colour.BGreen("Unmarshalled Register POS Response Body: %s \n"), oxipayResponse)
-	return oxipayResponse, err
-
-}
-
-func bind(r *http.Request) (*OxipayRegistrationPayload, error) {
+func bind(r *http.Request) (*oxipay.OxipayRegistrationPayload, error) {
 
 	if err := r.ParseForm(); err != nil {
 		log.Fatalf("Error parsing form: %s", err)
@@ -363,7 +267,7 @@ func bind(r *http.Request) (*OxipayRegistrationPayload, error) {
 	return register, nil
 }
 
-func (payload *OxipayRegistrationPayload) validate() error {
+func (payload *oxipay.OxipayRegistrationPayload) validate() error {
 
 	if payload == nil {
 		return errors.New("payload is empty")
@@ -372,7 +276,7 @@ func (payload *OxipayRegistrationPayload) validate() error {
 	return nil
 }
 
-func processAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
+func processAuthorisation(oxipayPayload *oxipay.OxipayPayload) (*oxipay.OxipayResponse, error) {
 	var authorisationURL = OxpayGateway + "/ProcessAuthorisation"
 
 	var err error
@@ -449,7 +353,8 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	origin := r.Form.Get("origin")
 	origin, _ = url.PathUnescape(origin)
 
-	vReq := &VendPaymentRequest{
+	// @todo new payment request
+	vReq := &vend.VendPaymentRequest{
 		Amount:     r.Form.Get("amount"),
 		Origin:     origin,
 		RegisterID: r.Form.Get("register_id"),
@@ -503,7 +408,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	origin := r.Form.Get("origin")
 	origin, _ = url.PathUnescape(origin)
 
-	vReq := &VendPaymentRequest{
+	vReq := &vend.VendPaymentRequest{
 		Amount:     r.Form.Get("amount"),
 		Origin:     origin,
 		RegisterID: r.Form.Get("register_id"),
@@ -636,108 +541,6 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func newNullString(s string) sql.NullString {
-	if len(s) == 0 {
-		return sql.NullString{}
-	}
-	return sql.NullString{
-		String: s,
-		Valid:  true,
-	}
-}
-
-func (t Terminal) save(user string) (bool, error) {
-
-	if db == nil {
-		return false, errors.New("I have no database connection")
-	}
-
-	query := `INSERT INTO 
-		oxipay_vend_map  
-		(
-			fxl_register_id,
-			fxl_seller_id,
-			fxl_device_signing_key,
-			origin_domain, 
-			vend_register_id,
-			created_by
-		) VALUES (?, ?, ?, ?, ?, ?) `
-
-	stmt, err := db.Prepare(query)
-
-	if err != nil {
-		return false, err
-	}
-
-	defer stmt.Close()
-
-	_, err = stmt.Exec(
-		newNullString(t.FxlRegisterID),
-		newNullString(t.FxlSellerID),
-		newNullString(t.FxlDeviceSigningKey),
-		newNullString(t.Origin),
-		newNullString(t.VendRegisterID),
-		newNullString(user),
-	)
-
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
-
-}
-
-func getRegisteredTerminal(r *VendPaymentRequest) (*Terminal, error) {
-
-	if db == nil {
-		return nil, errors.New("I have no database connection")
-	}
-
-	sql := `SELECT 
-			 fxl_register_id, 
-			 fxl_seller_id,
-			 fxl_device_signing_key, 
-			 origin_domain,
-			 vend_register_id
-			FROM 
-				oxipay_vend_map 
-			WHERE 
-				origin_domain = ? 
-			AND
-				vend_register_id = ? 
-			AND 1=1`
-
-	rows, err := db.Query(sql, r.Origin, r.RegisterID)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var terminal = new(Terminal)
-	noRows := 0
-
-	for rows.Next() {
-		noRows++
-		var err = rows.Scan(
-			&terminal.FxlRegisterID,
-			&terminal.FxlSellerID,
-			&terminal.FxlDeviceSigningKey,
-			&terminal.Origin,
-			&terminal.VendRegisterID,
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	if noRows < 1 {
-		return nil, errors.New("Unable to find a matching terminal ")
-	}
-
-	return terminal, nil
-}
-
 func sendResponse(w http.ResponseWriter, response *Response) {
 
 	// Marshal our response into JSON.
@@ -802,7 +605,7 @@ func generatePlainTextSignature(payload interface{}) string {
 	return buffer.String()
 }
 
-func validPaymentRequest(req *VendPaymentRequest) (*VendPaymentRequest, error) {
+func validPaymentRequest(req *vend.VendPaymentRequest) (*vend.VendPaymentRequest, error) {
 
 	// convert the amount to cents and then go back to a string for
 	// the checksum
@@ -813,21 +616,3 @@ func validPaymentRequest(req *VendPaymentRequest) (*VendPaymentRequest, error) {
 	req.Amount = strconv.FormatFloat((amountFloat * 100), 'f', 0, 64)
 	return req, err
 }
-
-// SignMessage will generate an HMAC of the plaintext
-func SignMessage(plainText string, signingKey string) string {
-
-	key := []byte(signingKey)
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(plainText))
-
-	return hex.EncodeToString(mac.Sum(nil))
-}
-
-// func CheckMAC(message, messageMAC, key []byte) bool {
-// 	mac := hmac.New(sha256.New, key)
-// 	mac.Write(message)
-
-// 	expectedMAC := mac.Sum(nil)
-// 	return hmac.Equal(messageMAC, expectedMAC)
-// }

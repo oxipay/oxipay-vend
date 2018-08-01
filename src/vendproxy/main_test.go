@@ -14,8 +14,8 @@ import (
 func TestMain(m *testing.M) {
 	// we need a database connection for most of the tests
 	connectToDatabase()
-	// OxpayGateway = "https://testpos.oxipay.com.au/webapi/v1/Test"
-	OxpayGateway = "https://sandboxpos.oxipay.com.au/webapi/v1"
+	OxpayGateway = "https://testpos.oxipay.com.au/webapi/v1/Test"
+	// OxpayGateway = "https://sandboxpos.oxipay.com.au/webapi/v1"
 
 	returnCode := m.Run()
 	db.Close()
@@ -170,7 +170,6 @@ func TestProcessAuthorisationRedirect(t *testing.T) {
 	if location := rr.HeaderMap.Get("Location"); location != "/register" {
 		t.Errorf("Function redirects but redirects to %s rather than /register", location)
 	}
-
 }
 
 func TestGeneratePayload(t *testing.T) {
