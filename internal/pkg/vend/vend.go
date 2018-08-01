@@ -1,9 +1,9 @@
 package vend
 
-// VendPaymentRequest is the originating request from vend
-type VendPaymentRequest struct {
+// PaymentRequest is the originating request from vend
+type PaymentRequest struct {
 	Amount     string
 	Origin     string
 	RegisterID string
-	code       string
+	Code       string
 }

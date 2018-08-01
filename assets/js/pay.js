@@ -127,11 +127,18 @@ function getURLParameters() {
 // Check response status from the gateway, we then manipulate the payment flow
 // in Vend in response to this using the Payment API steps.
 function checkResponse(response) {
+  
+
   switch (response.status) {
     case 'ACCEPTED':
       $('#statusMessage').empty()
 
-      acceptStep('<div>ACCEPTED</div>', response.id)
+      var receiptHTML = `
+        <div>
+          <h2>APPROVED</h2>
+          <span>Oxipay Purchase #: ` + response.id+ ` </span>
+        </div>`;
+      acceptStep(receiptHTML, response.id)
       break
     case 'DECLINED':
       $('#statusMessage').empty()
@@ -181,7 +188,7 @@ function checkResponse(response) {
 // sendPayment sends payment context to the gateway to begin processing the
 // payment.
 function sendPayment(outcome) {
-
+  
   // grab payment code from form
   var paymentCode = $("#paymentcode").val()
 
@@ -304,10 +311,8 @@ function seeForm() {
 // On initial load of modal, configure the page settings such as removing the
 // close button and setting the header.
 $(function () {
-  debugger
-  console.log("in here");
-  // Send the SETUP step with our configuration values..
-  console.log('setting up')
+  
+  // Send the SETUP step with our configuration values..  
   setupStep()
 
   //$('#statusMessage').empty()
