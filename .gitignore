@@ -21,3 +21,4 @@ node_modules
 *.lock
 # Glide Vendor
 vendor/
+vendor/*
