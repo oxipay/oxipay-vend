@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -8,18 +11,28 @@ import (
 	"strings"
 	"testing"
 
+	uuid "github.com/nu7hatch/gouuid"
 	"github.com/vend/peg/internal/pkg/oxipay"
 	"github.com/vend/peg/internal/pkg/terminal"
+	"github.com/vend/peg/internal/pkg/vend"
 	shortid "github.com/ventu-io/go-shortid"
 )
 
 func TestMain(m *testing.M) {
 	// we need a database connection for most of the tests
-	db := connectToDatabase()
-	defer db.Close()
+	connectionParams := &DbConnection{
+		username: "root",
+		password: "t9e3ioz0",
+		host:     "172.18.0.2",
+		name:     "vend",
+		timeout:  3600,
+	}
+	terminal.Db = connectToDatabase(connectionParams)
+
+	defer terminal.Db.Close()
 	oxipay.GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/Test"
 	oxipay.CreateKeyURL = oxipay.GatewayURL + "/CreateKey"
-
+	oxipay.ProcessAuthorisationURL = oxipay.GatewayURL + "/ProcessAuthorisation"
 	returnCode := m.Run()
 
 	os.Exit(returnCode)
@@ -34,7 +47,7 @@ func TestTerminalSave(t *testing.T) {
 		FxlDeviceSigningKey: "VK5NGgc7nFJp",
 		FxlRegisterID:       "Oxipos",
 		FxlSellerID:         "30188105",
-		Origin:              "http://pos.oxipay.com.au",
+		Origin:              "http://pos.example.com",
 		VendRegisterID:      uniqueID,
 	}
 	saved, err := terminal.Save("unit-test")
@@ -44,6 +57,7 @@ func TestTerminalSave(t *testing.T) {
 	}
 }
 
+// TestTerminalUniqueSave ensures that we get an error if we try to save the same terminal twice
 func TestTerminalUniqueSave(t *testing.T) {
 	// { Success SCRK01 Success VK5NGgc7nFJp 481f1e4098465f5229b33d91e0687c6123b91078e5c727b6d8ebf9360af145e7}
 
@@ -71,12 +85,7 @@ func TestRegisterHandler(t *testing.T) {
 	// pass 'nil' as the third parameter.
 	form := url.Values{}
 	form.Add("MerchantID", "30188105")
-	form.Add("Origin", "http://pos.oxipay.com.au")
-	form.Add("FirmwareVersion", "1.0")
-
-	form.Add("VendRegisterID", "13f35d8e-a5cf-4df1-b3af-79f045bb3c50")
 	form.Add("DeviceToken", "01SUCCES") // for this to work against sandbox or prod it needs a real token
-	form.Add("OperatorID", "Vend")
 
 	req, err := http.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
 
@@ -85,8 +94,30 @@ func TestRegisterHandler(t *testing.T) {
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	// add vars to the seesion to simulate a redirect
+	initSessionStore()
+
+	session, err := SessionStore.Get(req, "oxipay")
+	if err != nil {
+		t.Errorf("Unable to get session store: %s ", err.Error())
+		return
+	}
+	guid, _ := uuid.NewV4()
+	vReq := &vend.PaymentRequest{
+		RegisterID: guid.String(),
+		Origin:     "http://pos.oxipay.com.au",
+	}
 	rr := httptest.NewRecorder()
+
+	session.Values["vReq"] = vReq
+	err = session.Save(req, rr)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+
 	handler := http.HandlerFunc(RegisterHandler)
 
 	// directly and pass in our Request and ResponseRecorder.
@@ -103,13 +134,31 @@ func TestRegisterHandler(t *testing.T) {
 // with both Oxipay and the local database
 func TestProcessAuthorisationHandler(t *testing.T) {
 
+	var uniqueID, _ = uuid.NewV4()
+	log.Printf("Generated RegisterID of %s \n", uniqueID)
+	terminal := &terminal.Terminal{
+		FxlDeviceSigningKey: "1234567890", // use hardcoded signing key for dummy endpoint
+		FxlRegisterID:       "Oxipos",
+		FxlSellerID:         "30188105",
+		Origin:              "http://pos.example.com",
+		VendRegisterID:      uniqueID.String(),
+	}
+
+	// we do this to ensure that it's registered already,
+	// otherwise we are going to get a 302
+	saved, err := terminal.Save("unit-test")
+	if saved != true {
+		t.Error("Unable to save register")
+		return
+	}
+
 	// Create a request to pass to our handler. We don't have any query parameters for now, so we'll
 	// pass 'nil' as the third parameter.
 	form := url.Values{}
 	form.Add("amount", "4400")
-	form.Add("origin", "http://pos.oxipay.com.au")
-	form.Add("paymentcode", "01APPROV") // needs a real payment code to succeed
-	form.Add("register_id", "13f35d8e-a5cf-4df1-b3af-79f045bb3c50")
+	form.Add("origin", "http://pos.example.com")
+	form.Add("paymentcode", "01APPROV") // needs a real payment code to succeed against sandbox / prod
+	form.Add("register_id", uniqueID.String())
 
 	req, err := http.NewRequest(http.MethodPost, "/pay", strings.NewReader(form.Encode()))
 
@@ -133,14 +182,20 @@ func TestProcessAuthorisationHandler(t *testing.T) {
 	}
 
 	// Check the response body is what we expect.
-	expected := `{ Success SCRK01 Success VK5NGgc7nFJp 481f1e4098465f5229b33d91e0687c6123b91078e5c727b6d8ebf9360af145e7}`
-	if rr.Body.String() != expected {
+
+	response := new(Response)
+	body, _ := ioutil.ReadAll(rr.Body)
+	err = json.Unmarshal(body, response)
+
+	if response.Status != "ACCEPTED" {
 		t.Errorf("handler returned unexpected body: got %v want %v",
-			rr.Body.String(), expected)
+			rr.Body.String(), "ACCEPTED")
 	}
 }
 
 func TestProcessAuthorisationRedirect(t *testing.T) {
+
+	var uniqueID, _ = uuid.NewV4()
 
 	// Create a request to pass to our handler. We don't have any query parameters for now, so we'll
 	// pass 'nil' as the third parameter.
@@ -148,7 +203,7 @@ func TestProcessAuthorisationRedirect(t *testing.T) {
 	form.Add("amount", "4400")
 	form.Add("origin", "http://nonexistent.oxipay.com.au")
 	form.Add("paymentcode", "012344")
-	form.Add("register_id", "13f35d8e-a5cf-4df1-b3af-79f045bb3c50")
+	form.Add("register_id", uniqueID.String())
 
 	req, err := http.NewRequest(http.MethodPost, "/pay", strings.NewReader(form.Encode()))
 
@@ -165,9 +220,9 @@ func TestProcessAuthorisationRedirect(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	// Check the status code is what we expect.
-	if status := rr.Code; status != http.StatusTemporaryRedirect {
+	if status := rr.Code; status != http.StatusFound {
 		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
+			status, http.StatusFound)
 	}
 
 	if location := rr.HeaderMap.Get("Location"); location != "/register" {
@@ -177,12 +232,13 @@ func TestProcessAuthorisationRedirect(t *testing.T) {
 
 func TestGeneratePayload(t *testing.T) {
 
-	var oxipayPayload = oxipay.OxipayPayload{
-		DeviceID:      "foobar",
-		MerchantID:    "3342342",
-		FinanceAmount: "1000",
-		// FirmwareVersion: "version 4.0",
-		// OperatorID:      "John",
+	log.Print("hello")
+	oxipayPayload := oxipay.OxipayPayload{
+		DeviceID:        "foobar",
+		MerchantID:      "3342342",
+		FinanceAmount:   "1000",
+		FirmwareVersion: "version 4.0",
+		OperatorID:      "John",
 		PurchaseAmount:  "1000",
 		PreApprovalCode: "1234",
 	}

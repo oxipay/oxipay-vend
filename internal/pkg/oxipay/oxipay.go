@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,7 +15,7 @@ import (
 	"sort"
 )
 
-//Version  which version of the proxy are we using
+// Version  which version of the proxy are we using
 const Version string = "1.0"
 
 // GatewayURL Default URL for the Oxipay Gateway @todo get from config
@@ -29,7 +28,10 @@ var ProcessAuthorisationURL = GatewayURL + "/ProcessAuthorisation"
 var CreateKeyURL = GatewayURL + "/CreateKey"
 
 // Db connection to database
-var Db *sql.DB
+// var Db *sql.DB
+
+//HTTPClientTimout default http client timeout
+const HTTPClientTimout = 0
 
 // OxipayRegistrationPayload required to register a device with Oxipay
 type OxipayRegistrationPayload struct {
@@ -90,9 +92,9 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 	log.Printf("Register POS Device Payload: %s", string(jsonValue))
 
 	client := http.Client{}
+	client.Timeout = HTTPClientTimout
 	response, responseErr := client.Post(CreateKeyURL, "application/json", bytes.NewBuffer(jsonValue))
 
-	// response, responseErr := client.Do(request)
 	if responseErr != nil {
 		panic(responseErr)
 	}
@@ -126,6 +128,7 @@ func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 	log.Println("Authorisation Payload: " + string(jsonValue))
 
 	client := http.Client{}
+	client.Timeout = HTTPClientTimout
 	response, responseErr := client.Post(ProcessAuthorisationURL, "application/json", bytes.NewBuffer(jsonValue))
 
 	if responseErr != nil {
@@ -156,8 +159,9 @@ func SignMessage(plainText string, signingKey string) string {
 	key := []byte(signingKey)
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(plainText))
-
-	return hex.EncodeToString(mac.Sum(nil))
+	macString := hex.EncodeToString(mac.Sum(nil))
+	log.Printf("Oxipay Signature: %s \n", macString)
+	return macString
 }
 
 // Validate will perform validation on a OxipayRegistrationPayload
@@ -210,14 +214,18 @@ func GeneratePlainTextSignature(payload interface{}) string {
 			buffer.WriteString(fmt.Sprintf("%s%s", v, payloadList[v]))
 		}
 	}
-
-	return buffer.String()
+	plainText := buffer.String()
+	log.Printf("Signature Plain Text: %s \n", plainText)
+	return plainText
 }
 
+// CheckMAC used to validate responses from the remote server
 func CheckMAC(message, messageMAC, key []byte) bool {
 	mac := hmac.New(sha256.New, key)
 	mac.Write(message)
 
 	expectedMAC := mac.Sum(nil)
+
+	// we use hmac.Equal because regular equality (i.e == ) is subject to timing attacks
 	return hmac.Equal(messageMAC, expectedMAC)
 }

@@ -1,6 +1,9 @@
 package main
 
 import (
+	_ "crypto/hmac"
+	"database/sql"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,11 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-
-	// "time"s
-	_ "crypto/hmac"
-	"database/sql"
-	"encoding/gob"
+	"time"
 
 	colour "github.com/bclicn/color"
 	_ "github.com/go-sql-driver/mysql"
@@ -47,6 +46,17 @@ type Response struct {
 	TrackingData string `json:"tracking_data,omitempty"`
 	Message      string `json:"message,omitempty"`
 	HTTPStatus   int    `json:"-"`
+	file         string
+}
+
+// DbConnection stores connection information for the database
+type DbConnection struct {
+	// @todo pull from config
+	username string
+	password string
+	host     string
+	name     string
+	timeout  time.Duration
 }
 
 // @todo load from config
@@ -58,16 +68,18 @@ var SessionStore *sessions.FilesystemStore
 func main() {
 
 	_ = oxipay.Ping()
-	oxipay.Db = connectToDatabase()
 
-	var err error
-	// SessionStore, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte("@todo_change_me"))
-	SessionStore = sessions.NewFilesystemStore("", []byte("some key"))
+	connectionParams := &DbConnection{
+		username: "root",
+		password: "t9e3ioz0",
+		host:     "172.18.0.2",
+		name:     "vend",
+		timeout:  3600,
+	}
 
-	_ = SessionStore
+	terminal.Db = connectToDatabase(connectionParams)
 
-	// register the type VendPaymentRequest so that we can use it later in the session
-	gob.Register(vend.PaymentRequest{})
+	initSessionStore()
 
 	// We are hosting all of the content in ./assets, as the resources are
 	// required by the frontend.
@@ -85,9 +97,6 @@ func main() {
 
 	log.Printf("Starting webserver on port %s \n", port)
 
-	if err != nil {
-		panic(err)
-	}
 	//defer sessionStore.Close()
 
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -95,13 +104,20 @@ func main() {
 	// @todo handle shutdowns
 }
 
-func connectToDatabase() *sql.DB {
-	// @todo pull from config
-	dbUser := "root"
-	dbPassword := "t9e3ioz0"
-	host := "172.18.0.2"
-	dbName := "vend"
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", dbUser, dbPassword, host, dbName)
+func initSessionStore() {
+
+	// SessionStore, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte("@todo_change_me"))
+	SessionStore = sessions.NewFilesystemStore("", []byte("some key"))
+	_ = SessionStore
+
+	// register the type VendPaymentRequest so that we can use it later in the session
+	paymentRequest := &vend.PaymentRequest{}
+	gob.Register(paymentRequest)
+}
+
+func connectToDatabase(params *DbConnection) *sql.DB {
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", params.username, params.password, params.host, params.name)
 
 	log.Printf(colour.BLightBlue("Attempting to connect to database %s \n"), dsn)
 
@@ -117,131 +133,137 @@ func connectToDatabase() *sql.DB {
 
 	// test to make sure it's all good
 	if err := db.Ping(); err != nil {
-		log.Printf(colour.Red("Unable to connect to %s"), dbName)
+		log.Printf(colour.Red("Unable to connect to %s"), params.name)
 		log.Fatal(err)
 	}
-	db.SetConnMaxLifetime(3600)
+	db.SetConnMaxLifetime(params.timeout)
 	return db
+}
+
+func getPaymentRequestFromSession(r *http.Request) (vend.PaymentRequest, error) {
+	var err error
+	vendPaymentRequest := &vend.PaymentRequest{}
+	if SessionStore == nil {
+		log.Println("Session Store is nil check previous logs for in indication of why it is in accessible")
+		return nil, err
+	}
+	// We get the Device Token from the
+	// @todo session panics if it's not there
+	session, err := SessionStore.Get(r, "oxipay")
+	if err != nil {
+		log.Println("Session Store unavailable :" + err.Error())
+		return nil, err
+	}
+	// get the vendRequest from the session
+	val := session.Values["vReq"]
+
+	vendPaymentRequest, ok := val.(vend.PaymentRequest)
+
+	if !ok {
+		msg := "Can't get vRequest from session"
+		log.Println(msg)
+		return nil, errors.New(msg)
+	}
+	return vendPaymentRequest, nil
 }
 
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	// logRequest(r)
-
+	browserResponse := &Response{}
 	switch r.Method {
 	case http.MethodPost:
 
-		browserResponse := &Response{}
-
+		// Bind the request from the browser to an Oxipay Registration Payload
 		registrationPayload, err := bind(r)
 
 		if err != nil {
 			browserResponse.HTTPStatus = http.StatusBadRequest
-			return
+			browserResponse.Message = err.Error()
+			sendResponse(w, r, browserResponse)
 		}
 
 		err = registrationPayload.Validate()
 
+		vendPaymentRequst, err := getPaymentRequestFromSession(r)
+
 		if err == nil {
-			// @todo move to separate function
-			plainText := oxipay.GeneratePlainTextSignature(registrationPayload)
-			log.Printf(colour.BLightYellow("Oxipay Plain Text: %s \n"), plainText)
 
 			// sign the message
-			registrationPayload.Signature = oxipay.SignMessage(plainText, registrationPayload.DeviceToken)
-			log.Printf(colour.BLightYellow("Oxipay Signature: %s \n"), registrationPayload.Signature)
+			registrationPayload.Signature = oxipay.SignMessage(oxipay.GeneratePlainTextSignature(registrationPayload), registrationPayload.DeviceToken)
 
 			// submit to oxipay
 			response, err := oxipay.RegisterPosDevice(registrationPayload)
 
 			if err != nil {
-
 				log.Println(err)
-				msg := "We are unable to process this request "
+				browserResponse.Message = "We are unable to process this request "
 				browserResponse.HTTPStatus = http.StatusBadGateway
-
-				w.WriteHeader(http.StatusBadGateway)
-				w.Write([]byte(msg))
-				return
 			}
+			browserResponse = processRegistrationResponse(response, vendPaymentRequst, registrationPayload)
 
-			switch response.Code {
-
-			case "SCRK01":
-
-				// We get the Device Token from the
-				// @todo session panics if it's not there
-				session, err := SessionStore.Get(r, "oxipay")
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-				val := session.Values["vReq"]
-				//val := session.Values["origin"]
-				//vReq, ok := val.(string)
-				var vendPaymentRequest = vend.PaymentRequest{}
-				vendPaymentRequest, ok := val.(vend.PaymentRequest)
-
-				if !ok {
-					_ = vendPaymentRequest
-					log.Println("Can't get vReq from session")
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-
-				//success
-				// redirect back to transaction
-				log.Print("Device Successfully registered")
-
-				terminal := terminal.NewTerminal(
-					response.Key,
-					registrationPayload.DeviceID,
-					registrationPayload.MerchantID,
-					vendPaymentRequest.Origin,
-					vendPaymentRequest.RegisterID,
-				)
-
-				_, err = terminal.Save("vend-proxy")
-				if err != nil {
-					log.Fatal(err)
-					browserResponse.Message = "Unable to process request"
-					browserResponse.HTTPStatus = http.StatusServiceUnavailable
-				} else {
-					browserResponse.Message = "Created"
-					browserResponse.HTTPStatus = http.StatusOK
-				}
-				// serve up the success page
-				http.ServeFile(w, r, "./assets/templates/register_success.html")
-				break
-			case "FCRK01":
-				// can't find this device token
-				browserResponse.Message = fmt.Sprintf("Device token %s can't be found in the remote service", registrationPayload.DeviceToken)
-				browserResponse.HTTPStatus = http.StatusBadRequest
-				break
-			case "FCRK02":
-				// device token already used
-				browserResponse.Message = fmt.Sprintf("Device token %s has previously been registered", registrationPayload.DeviceToken)
-				browserResponse.HTTPStatus = http.StatusBadRequest
-				break
-
-			case "EISE01":
-				browserResponse.Message = fmt.Sprintf("Oxipay Internal Server error for device: %s", registrationPayload.DeviceToken)
-				browserResponse.HTTPStatus = http.StatusBadGateway
-				break
-			}
 		} else {
-			browserResponse.Message = err.Error()
+			log.Print("Error: " + err.Error())
+			browserResponse.Message = "Sorry. We are unable to process this registration. Please contact support"
 			browserResponse.HTTPStatus = http.StatusBadRequest
 		}
-		log.Print(browserResponse.Message)
-		sendResponse(w, browserResponse)
+		break
+	default:
+		browserResponse.HTTPStatus = http.StatusOK
+		browserResponse.file = "./assets/templates/register.html"
+		break
+	}
+	log.Print(browserResponse.Message)
+	sendResponse(w, r, browserResponse)
+	return
+}
 
+func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.PaymentRequest, oxipayRegistration *oxipay.OxipayRegistrationPayload) *Response {
+	browserResponse := &Response{}
+	switch response.Code {
+	case "SCRK01":
+
+		//success
+		// redirect back to transaction
+		log.Print("Device Successfully registered")
+
+		terminal := terminal.NewTerminal(
+			response.Key,
+			oxipayRegistration.DeviceID,
+			oxipayRegistration.MerchantID,
+			vReq.Origin,
+			vReq.RegisterID,
+		)
+
+		_, err := terminal.Save("vend-proxy")
+		if err != nil {
+			log.Fatal(err)
+			browserResponse.Message = "Unable to process request"
+			browserResponse.HTTPStatus = http.StatusServiceUnavailable
+		} else {
+			browserResponse.Message = "Created"
+			browserResponse.HTTPStatus = http.StatusOK
+		}
+
+		browserResponse.file = "./assets/templates/register_success.html"
+		break
+	case "FCRK01":
+		// can't find this device token
+		browserResponse.Message = fmt.Sprintf("Device token %s can't be found in the remote service", oxipayRegistration.DeviceToken)
+		browserResponse.HTTPStatus = http.StatusBadRequest
+		break
+	case "FCRK02":
+		// device token already used
+		browserResponse.Message = fmt.Sprintf("Device token %s has previously been registered", oxipayRegistration.DeviceID)
+		browserResponse.HTTPStatus = http.StatusBadRequest
 		break
 
-	default:
-		http.ServeFile(w, r, "./assets/templates/register.html")
+	case "EISE01":
+		browserResponse.Message = fmt.Sprintf("Oxipay Internal Server error for device: %s", oxipayRegistration.DeviceID)
+		browserResponse.HTTPStatus = http.StatusBadGateway
+		break
 	}
-	return
+	return browserResponse
 }
 
 func bind(r *http.Request) (*oxipay.OxipayRegistrationPayload, error) {
@@ -299,6 +321,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	// ensure that we have a
 	session, err := SessionStore.Get(r, "oxipay")
 	if err != nil {
+		log.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -396,7 +419,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		// redirect
-		http.Redirect(w, r, "/register", 302)
+		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
 	log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
@@ -435,7 +458,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	oxipayResponse, err := oxipay.ProcessAuthorisation(oxipayPayload)
 
 	if err != nil {
-		http.Error(w, "There was a problem processing the request", 500)
+		http.Error(w, "There was a problem processing the request", http.StatusInternalServerError)
 		// log the raw response
 		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
 		log.Printf(colour.Red(msg))
@@ -494,12 +517,12 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		break
 	}
 
-	sendResponse(w, response)
+	sendResponse(w, r, response)
 	return
 
 }
 
-func sendResponse(w http.ResponseWriter, response *Response) {
+func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 
 	// Marshal our response into JSON.
 	responseJSON, err := json.Marshal(response)
@@ -512,10 +535,17 @@ func sendResponse(w http.ResponseWriter, response *Response) {
 	log.Printf("Response: %s \n", responseJSON)
 
 	if response.HTTPStatus == 0 {
-		response.HTTPStatus = 500
+		response.HTTPStatus = http.StatusInternalServerError
 	}
 	w.WriteHeader(response.HTTPStatus)
 	w.Write(responseJSON)
+
+	if len(response.file) > 0 {
+
+		// serve up the success page
+		// @todo check file exists
+		http.ServeFile(w, r, response.file)
+	}
 	return
 }
 

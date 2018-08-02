@@ -5,3 +5,4 @@ import:
 - package: github.com/srinathgs/mysqlstore
 - package: github.com/ventu-io/go-shortid
 - package: github.com/bclicn/color
+- package: github.com/nu7hatch/gouuid
