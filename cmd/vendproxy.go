@@ -83,7 +83,7 @@ func main() {
 
 	// We are hosting all of the content in ./assets, as the resources are
 	// required by the frontend.
-	fileServer := http.FileServer(http.Dir("assets"))
+	fileServer := http.FileServer(http.Dir("../assets"))
 	http.Handle("/assets/", http.StripPrefix("/assets/", fileServer))
 	http.HandleFunc("/", Index)
 	http.HandleFunc("/pay", PaymentHandler)
@@ -111,8 +111,7 @@ func initSessionStore() {
 	_ = SessionStore
 
 	// register the type VendPaymentRequest so that we can use it later in the session
-	paymentRequest := &vend.PaymentRequest{}
-	gob.Register(paymentRequest)
+	gob.Register(&vend.PaymentRequest{})
 }
 
 func connectToDatabase(params *DbConnection) *sql.DB {
@@ -140,7 +139,7 @@ func connectToDatabase(params *DbConnection) *sql.DB {
 	return db
 }
 
-func getPaymentRequestFromSession(r *http.Request) (vend.PaymentRequest, error) {
+func getPaymentRequestFromSession(r *http.Request) (*vend.PaymentRequest, error) {
 	var err error
 	vendPaymentRequest := &vend.PaymentRequest{}
 	if SessionStore == nil {
@@ -155,9 +154,8 @@ func getPaymentRequestFromSession(r *http.Request) (vend.PaymentRequest, error) 
 		return nil, err
 	}
 	// get the vendRequest from the session
-	val := session.Values["vReq"]
-
-	vendPaymentRequest, ok := val.(vend.PaymentRequest)
+	vReq := session.Values["vReq"]
+	vendPaymentRequest, ok := vReq.(*vend.PaymentRequest)
 
 	if !ok {
 		msg := "Can't get vRequest from session"
@@ -210,7 +208,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		break
 	default:
 		browserResponse.HTTPStatus = http.StatusOK
-		browserResponse.file = "./assets/templates/register.html"
+		browserResponse.file = "../assets/templates/register.html"
 		break
 	}
 	log.Print(browserResponse.Message)
@@ -372,7 +370,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.ServeFile(w, r, "./assets/templates/index.html")
+	http.ServeFile(w, r, "../assets/templates/index.html")
 }
 
 // PaymentHandler receives the payment request from Vend and sends it to the
@@ -524,6 +522,13 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 
+	if len(response.file) > 0 {
+		// serve up the success page
+		// @todo check file exists
+		http.ServeFile(w, r, response.file)
+		return
+	}
+
 	// Marshal our response into JSON.
 	responseJSON, err := json.Marshal(response)
 	if err != nil {
@@ -540,12 +545,6 @@ func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 	w.WriteHeader(response.HTTPStatus)
 	w.Write(responseJSON)
 
-	if len(response.file) > 0 {
-
-		// serve up the success page
-		// @todo check file exists
-		http.ServeFile(w, r, response.file)
-	}
 	return
 }
 
