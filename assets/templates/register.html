@@ -16,33 +16,32 @@
 <div class="container center ">
     <div class="vd-mln vd-mrn js-payment-signup-option" data-payment-signup-option="2">
         <span class="vd-text-label">Pair Oxipay with Vend</span>
-        <div class="vd-panel vd-mln vd-mrn vd-mtm vd-flex vd-flex--column vd-paxl">
-            <div class="vd-flex vd-flex--row vd-flex--justify-between vd-pbxl">
-                <div class="cv-payment-type-step-item">
+        <div >
+            <div class="hcontainer buffer" >
+                <div class="item" style="text-align: left;">
                     <img alt="Oxipay Step 1" src="/assets/images/step1.png">
-                    <p class="vd-text--secondary vd-mts">
+                    <p >
                         <a href="https://portals.oxipay.com.au/merchantarea#/login" rel="noreferrer noopener" target="_blank"
-                            class="vd-link">Login to your Merchant Portal</a>
+                            class="vd-link">Login</a>
                     </p>
                 </div>
-                <div class="cv-payment-type-step-item cv-payment-type-step-item-arrow">
-                    <i class="fa fa-arrow-right cv-payment-type-step-arrow vd-text--secondary"></i>
+                <div class="arrow center-text">
+                    <span class="fa fa-arrow-right "></span>
                 </div>
-                <div class="cv-payment-type-step-item">
+                <div class="item center-text">
                     <img alt="Oxipay Step 2" src="/assets/images/step2.png">
-                    <p class="vd-text--secondary vd-mts">Generate a Device Token.</p>
+                    <p >Generate a Device Token.</p>
                 </div>
-                <div class="cv-payment-type-step-item cv-payment-type-step-item-arrow">
-                    <i class="fa fa-arrow-right cv-payment-type-step-arrow vd-text--secondary"></i>
+                <div class="arrow center-text">
+                    <span class="fa fa-arrow-right "></span>
                 </div>
-                <div class="cv-payment-type-step-item">
+                <div class="item" style="text-align: right;">
                     <img alt="Oxipay Step 3" src="/assets/images/step3.png">
-                    <p class="vd-text--secondary vd-mts">You can now accept Oxipay
-                        <br> on your paired register.</p>
+                    <p>Enter Merchant ID &amp; Password </p>
                 </div>
             </div>
 
-
+            <hr />
             <div class="form-group">
                 <form action="/register" method="POST" id="paymentform" enctype="application/x-www-form-urlencoded">
                     <div class="form-group">
@@ -53,16 +52,16 @@
                         <label for="paymentcode" class="form-check-label">Device Token</label>
                         <input name="DeviceToken" id="DeviceToken" class="form-control" />
                     </div>
-                    <div>
+                    <div class="buttons">
                         <input type="submit" class="vd-button vd-button--primary" value="Pair Register" />
                         <input type="submit" class="vd-button vd-button--secondary" value="Cancel" />
                     </div>
                 </form>
             </div>
-            <hr>
+            
             <p>
                 Having trouble? Contact us by
-                <a href="mailto:pit@oxipay.com.au"></a>email</a> or call
+                <a href="mailto:pit@oxipay.com.au">email</a> or call
                 <span class="phone">+61 884641835</span> or
                 <span class="phone">+64800729237</span>
             </p>

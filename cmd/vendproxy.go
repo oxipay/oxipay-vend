@@ -243,7 +243,7 @@ func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.Pay
 			browserResponse.HTTPStatus = http.StatusOK
 		}
 
-		browserResponse.file = "./assets/templates/register_success.html"
+		browserResponse.file = "../assets/templates/register_success.html"
 		break
 	case "FCRK01":
 		// can't find this device token
