@@ -173,7 +173,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 
 		// Bind the request from the browser to an Oxipay Registration Payload
-		registrationPayload, err := bind(r)
+		registrationPayload, err := bindToRegistrationPayload(r)
 
 		if err != nil {
 			browserResponse.HTTPStatus = http.StatusBadRequest
@@ -264,7 +264,7 @@ func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.Pay
 	return browserResponse
 }
 
-func bind(r *http.Request) (*oxipay.OxipayRegistrationPayload, error) {
+func bindToRegistrationPayload(r *http.Request) (*oxipay.OxipayRegistrationPayload, error) {
 
 	if err := r.ParseForm(); err != nil {
 		log.Fatalf("Error parsing form: %s", err)
@@ -373,16 +373,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "../assets/templates/index.html")
 }
 
-// PaymentHandler receives the payment request from Vend and sends it to the
-// payment gateway.
-func PaymentHandler(w http.ResponseWriter, r *http.Request) {
-	// Vend sends multiple arguments for use by the gateway.
-	// "amount" is the subtotal of the sale including tax.
-	// "origin" is the Vend store URL that the transaction came from.
-	//
-	// optional:
-	// "register_id" is the ID of the Vend register that sent the transaction.
-	// "outcome" is the desired outcome of the payment flow.
+func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 	r.ParseForm()
 	origin := r.Form.Get("origin")
 	origin, _ = url.PathUnescape(origin)
@@ -394,24 +385,27 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		Code:       r.Form.Get("paymentcode"),
 	}
 
-	log.Printf("Received %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
+	log.Printf("Payment: %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
 	vReq, err := validPaymentRequest(vReq)
-	if err != nil {
-		w.Write([]byte("Not a valid request"))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
 
-	//
-	// To suggest this, we simulate waiting for a payment completion for a few
-	// seconds. In reality this step can take much longer as the buyer completes
-	// the terminal instruction, and the amount is sent to the processor for
-	// approval.
-	// delay := 4 * time.Second
-	// log.Printf("Waiting for %d seconds", delay/time.Second)
+	return vReq, err
+}
+
+// PaymentHandler receives the payment request from Vend and sends it to the
+// payment gateway.
+func PaymentHandler(w http.ResponseWriter, r *http.Request) {
+	var vReq *vend.PaymentRequest
+	var err error
+
+	if vReq, err = bindToPaymentPayload(r); err != nil {
+		log.Print(err)
+		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
+	}
 
 	// looks up the database to get the fake Oxipay terminal
 	// so that we can issue this against Oxipay
+	// if the seller has correctly configured the gateway they will not hit this
+	// directly but it's here as safeguard
 
 	terminal, err := terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
 
@@ -420,7 +414,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
-	log.Printf("Using Oxipay register %s ", terminal.FxlRegisterID)
+	log.Printf("Processing Payment using Oxipay register %s ", terminal.FxlRegisterID)
 
 	txnRef, err := shortid.Generate()
 

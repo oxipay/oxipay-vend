@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+
+	"github.com/vend/peg/internal/pkg/oxipay"
 )
 
 // Version  which version of the proxy are we using
@@ -228,4 +230,103 @@ func CheckMAC(message, messageMAC, key []byte) bool {
 
 	// we use hmac.Equal because regular equality (i.e == ) is subject to timing attacks
 	return hmac.Equal(messageMAC, expectedMAC)
+}
+
+// ResponseCode maps the oxipay response code to a generic ACCEPT/DECLINE
+type responseCode struct {
+	TxnStatus string,
+	LogMessage   string,
+	CustomerMessage string,
+}
+
+// ResponseCode
+func ProcessAuthorisationResponseCode() func(string) *responseCode {
+
+	innerMap := map[string]oxipay.responseCode{
+		"SPRA01": &responseCode {
+			TxnStatus: "APPROVED",
+			LogMessage: "APPROVED", 
+			CustomerMessage: "APPROVED",
+		},
+		"FPRA01": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined due to internal risk assessment against the customer", 
+			CustomerMessage: "Do not try again",
+		},
+		"FPRA02": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined due to insufficient funds for the deposit", 
+			CustomerMessage: "Please call customer support",
+		},
+		"FPRA03": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined as communication to the bank is currently unavailable", 
+			CustomerMessage: "Please try again shortly. Communication to the bank is unavailable",
+		},
+		"FPRA04": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined because the customer limit has been exceeded", 
+			CustomerMessage: "Please contact Oxipay customer support",
+		},
+		"FPRA05": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined due to negative payment history for the customer", 
+			CustomerMessage: "Please contact Oxipay customer support for more information",
+		},
+		"FPRA06": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined because the credit-card used for the deposit is expired", 
+			CustomerMessage: "Declined because the credit-card used for the deposit is expired",
+		},
+		"FPRA07": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined because supplied POSTransactionRef has already been processed", 
+			CustomerMessage: "We have seen this Transaction ID before, please try again",
+		},
+		"FPRA08": &responseCode {
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined because the instalment amount was below the minimum threshold", 
+			CustomerMessage: "Transaction below minimum",
+		},
+		"FPRA09": &responseCode {
+			TxnStatus: "",
+			LogMessage: "", 
+			CustomerMessage: "",
+		},
+		"FPRA21": &responseCode {
+			TxnStatus: "",
+			LogMessage: "", 
+			CustomerMessage: "",
+		},
+		"FPRA22": &responseCode {
+			TxnStatus: "",
+			LogMessage: "", 
+			CustomerMessage: "",
+		},
+		"FPRA23": &responseCode {
+			TxnStatus: "",
+			LogMessage: "", 
+			CustomerMessage: "",
+		},
+		"FPRA24": &responseCode {
+			TxnStatus: "",
+			LogMessage: "", 
+			CustomerMessage: "",
+		},
+		"FPRA99": &responseCode {
+			TxnStatus: "",
+			LogMessage: "", 
+			CustomerMessage: "",
+		},
+		"EVAL02": &responseCode {
+			TxnStatus: "",
+			LogMessage: "", 
+			CustomerMessage: "",
+		},
+
+	}
+
+	return func(key string) *responseCode {
+		return innerMap[key]
+	}
 }
