@@ -289,41 +289,43 @@ func ProcessAuthorisationResponseCode() func(string) *responseCode {
 			CustomerMessage: "Transaction below minimum",
 		},
 		"FPRA09": &responseCode {
-			TxnStatus: "",
-			LogMessage: "", 
-			CustomerMessage: "",
+			TxnStatus: "DECLINED",
+			LogMessage: "Declined because purchase amount exceeded pre-approved amount", 
+			CustomerMessage: "Please contact Oxipay customer support",
 		},
 		"FPRA21": &responseCode {
-			TxnStatus: "",
-			LogMessage: "", 
-			CustomerMessage: "",
+			TxnStatus: "DECLINED",
+			LogMessage: "The Payment Code was not found", 
+			CustomerMessage: "This is not a valid Payment Code.",
 		},
 		"FPRA22": &responseCode {
-			TxnStatus: "",
-			LogMessage: "", 
-			CustomerMessage: "",
+			TxnStatus: "DECLINED",
+			LogMessage: "The Payment Code has already been used", 
+			CustomerMessage: "The Payment Code has already been used",
 		},
 		"FPRA23": &responseCode {
-			TxnStatus: "",
-			LogMessage: "", 
-			CustomerMessage: "",
+			TxnStatus: "DECLINED",
+			LogMessage: "The Payment Code has expired", 
+			CustomerMessage: "The Payment Code has expired",
 		},
 		"FPRA24": &responseCode {
-			TxnStatus: "",
-			LogMessage: "", 
-			CustomerMessage: "",
+			TxnStatus: "DECLINED",
+			LogMessage: "The Payment Code has been cancelled", 
+			CustomerMessage: `Payment Code has been cancelled. 
+			Please try again with a new Payment Code`,
 		},
 		"FPRA99": &responseCode {
-			TxnStatus: "",
-			LogMessage: "", 
-			CustomerMessage: "",
+			TxnStatus: "DECLINED",
+			LogMessage: "DECLINED by Oxipay Gateway", 
+			CustomerMessage: "DECLINED",
 		},
 		"EVAL02": &responseCode {
-			TxnStatus: "",
-			LogMessage: "", 
-			CustomerMessage: "",
+			TxnStatus: "DECLINE",
+			LogMessage: "Request is invalid", 
+			CustomerMessage: `The request to Oxipay was invalid. 
+			You can try again with a different Payment Code. 
+			Please contact pit@oxipay.com.au for further support`,
 		},
-
 	}
 
 	return func(key string) *responseCode {
