@@ -13,8 +13,6 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
-
-	"github.com/vend/peg/internal/pkg/oxipay"
 )
 
 // Version  which version of the proxy are we using
@@ -234,94 +232,103 @@ func CheckMAC(message, messageMAC, key []byte) bool {
 
 // ResponseCode maps the oxipay response code to a generic ACCEPT/DECLINE
 type responseCode struct {
-	TxnStatus string,
-	LogMessage   string,
-	CustomerMessage string,
+	TxnStatus       string
+	LogMessage      string
+	CustomerMessage string
 }
 
-// ResponseCode
-func ProcessAuthorisationResponseCode() func(string) *responseCode {
+const (
+	// StatusApproved Transaction Successful
+	StatusApproved = "APPROVED"
+	// StatusDeclined Transaction Declined
+	StatusDeclined = "DECLINED"
+	// StatusFailed Transaction Failed
+	StatusFailed = "FAILED"
+)
 
-	innerMap := map[string]oxipay.responseCode{
-		"SPRA01": &responseCode {
-			TxnStatus: "APPROVED",
-			LogMessage: "APPROVED", 
+// ProcessAuthorisationResponses provides a guarded response type based on the response code from the Oxipay request
+func ProcessAuthorisationResponses() func(string) *responseCode {
+
+	innerMap := map[string]*responseCode{
+		"SPRA01": &responseCode{
+			TxnStatus:       StatusApproved,
+			LogMessage:      "APPROVED",
 			CustomerMessage: "APPROVED",
 		},
-		"FPRA01": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined due to internal risk assessment against the customer", 
+		"FPRA01": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined due to internal risk assessment against the customer",
 			CustomerMessage: "Do not try again",
 		},
-		"FPRA02": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined due to insufficient funds for the deposit", 
+		"FPRA02": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined due to insufficient funds for the deposit",
 			CustomerMessage: "Please call customer support",
 		},
-		"FPRA03": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined as communication to the bank is currently unavailable", 
+		"FPRA03": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Declined as communication to the bank is currently unavailable",
 			CustomerMessage: "Please try again shortly. Communication to the bank is unavailable",
 		},
-		"FPRA04": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined because the customer limit has been exceeded", 
+		"FPRA04": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined because the customer limit has been exceeded",
 			CustomerMessage: "Please contact Oxipay customer support",
 		},
-		"FPRA05": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined due to negative payment history for the customer", 
+		"FPRA05": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined due to negative payment history for the customer",
 			CustomerMessage: "Please contact Oxipay customer support for more information",
 		},
-		"FPRA06": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined because the credit-card used for the deposit is expired", 
+		"FPRA06": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined because the credit-card used for the deposit is expired",
 			CustomerMessage: "Declined because the credit-card used for the deposit is expired",
 		},
-		"FPRA07": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined because supplied POSTransactionRef has already been processed", 
+		"FPRA07": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined because supplied POSTransactionRef has already been processed",
 			CustomerMessage: "We have seen this Transaction ID before, please try again",
 		},
-		"FPRA08": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined because the instalment amount was below the minimum threshold", 
+		"FPRA08": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined because the instalment amount was below the minimum threshold",
 			CustomerMessage: "Transaction below minimum",
 		},
-		"FPRA09": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "Declined because purchase amount exceeded pre-approved amount", 
+		"FPRA09": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Declined because purchase amount exceeded pre-approved amount",
 			CustomerMessage: "Please contact Oxipay customer support",
 		},
-		"FPRA21": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "The Payment Code was not found", 
+		"FPRA21": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "The Payment Code was not found",
 			CustomerMessage: "This is not a valid Payment Code.",
 		},
-		"FPRA22": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "The Payment Code has already been used", 
+		"FPRA22": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "The Payment Code has already been used",
 			CustomerMessage: "The Payment Code has already been used",
 		},
-		"FPRA23": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "The Payment Code has expired", 
+		"FPRA23": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "The Payment Code has expired",
 			CustomerMessage: "The Payment Code has expired",
 		},
-		"FPRA24": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "The Payment Code has been cancelled", 
+		"FPRA24": &responseCode{
+			TxnStatus:  StatusDeclined,
+			LogMessage: "The Payment Code has been cancelled",
 			CustomerMessage: `Payment Code has been cancelled. 
 			Please try again with a new Payment Code`,
 		},
-		"FPRA99": &responseCode {
-			TxnStatus: "DECLINED",
-			LogMessage: "DECLINED by Oxipay Gateway", 
+		"FPRA99": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "DECLINED by Oxipay Gateway",
 			CustomerMessage: "DECLINED",
 		},
-		"EVAL02": &responseCode {
-			TxnStatus: "DECLINE",
-			LogMessage: "Request is invalid", 
+		"EVAL02": &responseCode{
+			TxnStatus:  StatusFailed,
+			LogMessage: "Request is invalid",
 			CustomerMessage: `The request to Oxipay was invalid. 
 			You can try again with a different Payment Code. 
 			Please contact pit@oxipay.com.au for further support`,

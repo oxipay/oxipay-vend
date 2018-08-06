@@ -25,7 +25,7 @@ import (
 	shortid "github.com/ventu-io/go-shortid"
 )
 
-// These are the possible sale statuses.
+// These are the possible sale statuses. // @todo move to vend
 const (
 	statusAccepted  = "ACCEPTED"
 	statusCancelled = "CANCELLED"
@@ -264,7 +264,7 @@ func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.Pay
 	return browserResponse
 }
 
-func processPaymentResponse() {
+func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *terminal.Terminal, oxipayPayload *oxipay.OxipayPayload) *Response {
 
 	// Specify an external transaction ID. This value can be sent back to Vend with
 	// the "ACCEPT" step as the JSON key "transaction_id".
@@ -273,57 +273,46 @@ func processPaymentResponse() {
 	// Build our response content, including the amount approved and the Vend
 	// register that originally sent the payment.
 	response := &Response{}
+	oxipayResponseCode := oxipay.ProcessAuthorisationResponses()(oxipayResponse.Code)
 
-	if response.Code == nil {
-		// bail out
-	}
+	// if oxipayResponse != nil || oxipayResponseCode.TxnStatus == "" {
 
-	oxipayResponse := oxipay.ProcessAuthorisationResponseCode()(response.Code)
-
-	// switch oxipayResponse.Code {
-	// case "SPRA01":
-	// 	response.Amount = oxipayPayload.PurchaseAmount
-	// 	response.ID = oxipayResponse.PurchaseNumber
-	// 	response.RegisterID = terminal.VendRegisterID
-	// 	response.Status = statusAccepted
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
-	// case "CANCEL":
-	// 	response.Status = statusCancelled
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
-	// case "ESIG01":
-	// 	// oxipay signature mismatch
-	// 	response.Status = statusFailed
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
-	// case "FPRA99":
-	// 	response.Status = statusDeclined
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
-	// case "EAUT01":
-	// 	// tried to process with an unknown terminal
-	// 	// needs registration
-	// 	// should we remove from mapping ? then redirect ?
-	// 	// need to think this through as we need to authenticate them first otherwise you
-	// 	// can remove other peoples transactions
-	// 	response.Status = statusFailed
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
-	// case "FAIL":
-	// 	response.Status = statusFailed
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
-	// case "TIMEOUT":
-	// 	response.Status = statusTimeout
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
-	// default:
-	// 	response.Status = statusUnknown
-	// 	response.HTTPStatus = http.StatusOK
-	// 	break
+	// 	response.Message = "Unable to estabilish communication with Oxipay"
+	// 	response.HTTPStatus = http.StatusBadRequest
+	// 	return response
 	// }
 
+	switch oxipayResponseCode.TxnStatus {
+	case oxipay.StatusApproved:
+		log.Println(oxipayResponseCode.LogMessage)
+		response.Amount = oxipayPayload.PurchaseAmount
+		response.ID = oxipayResponse.PurchaseNumber
+		response.Status = statusAccepted
+		response.HTTPStatus = http.StatusOK
+		response.Message = oxipayResponseCode.CustomerMessage
+		break
+	case oxipay.StatusDeclined:
+		response.HTTPStatus = http.StatusOK
+		response.ID = ""
+		response.Status = statusDeclined
+		response.Message = oxipayResponseCode.CustomerMessage
+		break
+
+	case oxipay.StatusFailed:
+		response.HTTPStatus = http.StatusOK
+		response.ID = ""
+		response.Status = statusFailed
+		response.Message = oxipayResponseCode.CustomerMessage
+		break
+	default:
+		// default to fail...not sure if this is right
+		response.HTTPStatus = http.StatusOK
+		response.ID = ""
+		response.Status = statusFailed
+		response.Message = oxipayResponseCode.CustomerMessage
+	}
+
+	return response
 }
 
 func bindToRegistrationPayload(r *http.Request) (*oxipay.OxipayRegistrationPayload, error) {
@@ -511,6 +500,9 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf(colour.Red(msg))
 		return
 	}
+
+	//
+	response := processPaymentResponse(oxipayResponse, terminal, oxipayPayload)
 
 	sendResponse(w, r, response)
 	return
