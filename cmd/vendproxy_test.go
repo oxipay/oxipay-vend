@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -18,6 +19,8 @@ import (
 	shortid "github.com/ventu-io/go-shortid"
 )
 
+var Db *sql.DB
+
 func TestMain(m *testing.M) {
 	// we need a database connection for most of the tests
 	connectionParams := &DbConnection{
@@ -27,9 +30,11 @@ func TestMain(m *testing.M) {
 		name:     "vend",
 		timeout:  3600,
 	}
-	terminal.Db = connectToDatabase(connectionParams)
+	Db = connectToDatabase(connectionParams)
+	defer Db.Close()
 
-	defer terminal.Db.Close()
+	terminal.Db = Db
+
 	oxipay.GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/Test"
 	oxipay.CreateKeyURL = oxipay.GatewayURL + "/CreateKey"
 	oxipay.ProcessAuthorisationURL = oxipay.GatewayURL + "/ProcessAuthorisation"
@@ -95,7 +100,7 @@ func TestRegisterHandler(t *testing.T) {
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	// add vars to the seesion to simulate a redirect
-	initSessionStore()
+	initSessionStore(Db, "ddddddddddddddddddd")
 
 	session, err := SessionStore.Get(req, "oxipay")
 	if err != nil {
