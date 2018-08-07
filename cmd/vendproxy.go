@@ -18,6 +18,8 @@ import (
 	colour "github.com/bclicn/color"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
+	//"github.com/gorilla/sessions"
+	"github.com/srinathgs/mysqlstore"
 	"github.com/vend/peg/internal/pkg/oxipay"
 	"github.com/vend/peg/internal/pkg/terminal"
 	"github.com/vend/peg/internal/pkg/vend"
@@ -60,13 +62,12 @@ type DbConnection struct {
 }
 
 // @todo load from config
-/// var SessionStore *mysqlstore.MySQLStore
+var DbSessionStore *mysqlstore.MySQLStore
 
 // SessionStore store of session data
-var SessionStore *sessions.FilesystemStore
+//var SessionStore *sessions.FilesystemStore
 
 func main() {
-
 	_ = oxipay.Ping()
 
 	connectionParams := &DbConnection{
@@ -77,9 +78,9 @@ func main() {
 		timeout:  3600,
 	}
 
-	terminal.Db = connectToDatabase(connectionParams)
-
-	initSessionStore()
+	db := connectToDatabase(connectionParams)
+	terminal.Db = db
+	DbSessionStore = initSessionStore(db, "mykey")
 
 	// We are hosting all of the content in ./assets, as the resources are
 	// required by the frontend.
@@ -104,19 +105,28 @@ func main() {
 	// @todo handle shutdowns
 }
 
-func initSessionStore() {
+func initSessionStore(db *sql.DB, secureSessionKey string) *mysqlstore.MySQLStore {
 
-	// SessionStore, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte("@todo_change_me"))
-	SessionStore = sessions.NewFilesystemStore("", []byte("some key"))
-	_ = SessionStore
+	store, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte("secretkey"))
+	store.Options = &sessions.Options{
+		Domain:   "",
+		Path:     "/",
+		MaxAge:   3600, // 8 hours
+		HttpOnly: true, // disable for this demo
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	//SessionStore = sessions.NewFilesystemStore("", []byte(secureSessionKey))
 
 	// register the type VendPaymentRequest so that we can use it later in the session
 	gob.Register(&vend.PaymentRequest{})
+	return store
 }
 
 func connectToDatabase(params *DbConnection) *sql.DB {
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", params.username, params.password, params.host, params.name)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true&loc=Local", params.username, params.password, params.host, params.name)
 
 	log.Printf(colour.BLightBlue("Attempting to connect to database %s \n"), dsn)
 
@@ -132,7 +142,7 @@ func connectToDatabase(params *DbConnection) *sql.DB {
 
 	// test to make sure it's all good
 	if err := db.Ping(); err != nil {
-		log.Printf(colour.Red("Unable to connect to %s"), params.name)
+		log.Printf(colour.Red("Unable to connect to database: %s on %"), params.name, params.host)
 		log.Fatal(err)
 	}
 	db.SetConnMaxLifetime(params.timeout)
@@ -141,16 +151,13 @@ func connectToDatabase(params *DbConnection) *sql.DB {
 
 func getPaymentRequestFromSession(r *http.Request) (*vend.PaymentRequest, error) {
 	var err error
+	var session *sessions.Session
+
 	vendPaymentRequest := &vend.PaymentRequest{}
-	if SessionStore == nil {
-		log.Println("Session Store is nil check previous logs for in indication of why it is in accessible")
-		return nil, err
-	}
-	// We get the Device Token from the
-	// @todo session panics if it's not there
-	session, err := SessionStore.Get(r, "oxipay")
+	session, err = getSession(r, "oxipay")
 	if err != nil {
-		log.Println("Session Store unavailable :" + err.Error())
+		log.Println(err.Error())
+		_ = session
 		return nil, err
 	}
 	// get the vendRequest from the session
@@ -162,7 +169,22 @@ func getPaymentRequestFromSession(r *http.Request) (*vend.PaymentRequest, error)
 		log.Println(msg)
 		return nil, errors.New(msg)
 	}
-	return vendPaymentRequest, nil
+	return vendPaymentRequest, err
+}
+
+func getSession(r *http.Request, sessionName string) (*sessions.Session, error) {
+	if DbSessionStore == nil {
+		log.Println(colour.Red("Can't get session store"))
+		return nil, errors.New("Can't get session store")
+	}
+
+	// ensure that we have a session
+	session, err := DbSessionStore.Get(r, sessionName)
+	if err != nil {
+		log.Println(err)
+		return session, err
+	}
+	return session, nil
 }
 
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
@@ -183,7 +205,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 		err = registrationPayload.Validate()
 
-		vendPaymentRequst, err := getPaymentRequestFromSession(r)
+		vendPaymentRequest, err := getPaymentRequestFromSession(r)
 
 		if err == nil {
 
@@ -198,7 +220,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				browserResponse.Message = "We are unable to process this request "
 				browserResponse.HTTPStatus = http.StatusBadGateway
 			}
-			browserResponse = processRegistrationResponse(response, vendPaymentRequst, registrationPayload)
+			browserResponse = processRegistrationResponse(response, vendPaymentRequest, registrationPayload)
 
 		} else {
 			log.Print("Error: " + err.Error())
@@ -359,25 +381,13 @@ func logRequest(r *http.Request) {
 // which outcome they would like the Pay Example to simulate.
 func Index(w http.ResponseWriter, r *http.Request) {
 
-	logRequest(r)
-
-	if SessionStore == nil {
-		log.Println(colour.Red("Can't get session"))
-		http.Error(w, "Sorry, something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	// ensure that we have a
-	session, err := SessionStore.Get(r, "oxipay")
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	//logRequest(r)
+	var err error
 
 	if err := r.ParseForm(); err != nil {
 		log.Fatalf("Error parsing form: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	origin := r.Form.Get("origin")
@@ -402,14 +412,20 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	_, err = terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
 
 	if err != nil {
+
 		// we don't have a valid terminal
 		// save the initial request vars in the session
 		// and then redirect to the register their terminal
 		//session.Values["registerId"] = vReq.registerID
 		//session.Values["origin"] = vReq.origin
+		session, err := getSession(r, "oxipay")
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		session.Values["vReq"] = vReq
 
-		err = session.Save(r, w)
+		err = sessions.Save(r, w)
 
 		if err != nil {
 			log.Fatal(err)
@@ -417,7 +433,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		log.Println("Session initiated")
 
 		// redirect
-		http.Redirect(w, r, "/register", 302)
+		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
 
