@@ -381,7 +381,7 @@ func logRequest(r *http.Request) {
 // which outcome they would like the Pay Example to simulate.
 func Index(w http.ResponseWriter, r *http.Request) {
 
-	//logRequest(r)
+	logRequest(r)
 	var err error
 
 	if err := r.ParseForm(); err != nil {
@@ -464,7 +464,10 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	var vReq *vend.PaymentRequest
 	var err error
 
-	if vReq, err = bindToPaymentPayload(r); err != nil {
+	logRequest(r)
+
+	vReq, err = bindToPaymentPayload(r)
+	if err != nil {
 		log.Print(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
 	}
