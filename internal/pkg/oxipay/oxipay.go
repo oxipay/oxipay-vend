@@ -85,6 +85,7 @@ func Ping() string {
 // RegisterPosDevice is used to register a new vend terminal
 func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
 	var err error
+	oxipayResponse := new(OxipayResponse)
 
 	jsonValue, _ := json.Marshal(payload)
 
@@ -96,8 +97,9 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 	response, responseErr := client.Post(CreateKeyURL, "application/json", bytes.NewBuffer(jsonValue))
 
 	if responseErr != nil {
-		panic(responseErr)
+		return oxipayResponse, responseErr
 	}
+
 	defer response.Body.Close()
 	log.Println("Register Response Status:", response.Status)
 	log.Println("Register Response Headers:", response.Header)
@@ -106,7 +108,6 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 
 	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
 	// into a struct
-	oxipayResponse := new(OxipayResponse)
 	err = json.Unmarshal(body, oxipayResponse)
 
 	if err != nil {
@@ -122,6 +123,7 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
 
 	var err error
+	oxipayResponse := new(OxipayResponse)
 
 	jsonValue, _ := json.Marshal(oxipayPayload)
 	log.Printf("POST to URL %s \n", ProcessAuthorisationURL)
@@ -132,7 +134,7 @@ func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 	response, responseErr := client.Post(ProcessAuthorisationURL, "application/json", bytes.NewBuffer(jsonValue))
 
 	if responseErr != nil {
-		panic(responseErr)
+		return oxipayResponse, responseErr
 	}
 	defer response.Body.Close()
 
@@ -142,7 +144,6 @@ func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 	body, _ := ioutil.ReadAll(response.Body)
 	log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
 
-	oxipayResponse := new(OxipayResponse)
 	err = json.Unmarshal(body, oxipayResponse)
 
 	if err != nil {
@@ -333,9 +334,25 @@ func ProcessAuthorisationResponses() func(string) *responseCode {
 			You can try again with a different Payment Code. 
 			Please contact pit@oxipay.com.au for further support`,
 		},
+		"ESIG01": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
+			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+		},
+		"EISE01": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Server Error",
+			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+		},
 	}
 
 	return func(key string) *responseCode {
-		return innerMap[key]
+		// check to make sure we know what the response is
+		ret := innerMap[key]
+
+		if ret == nil {
+			return innerMap["EISE01"]
+		}
+		return ret
 	}
 }
