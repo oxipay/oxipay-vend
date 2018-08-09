@@ -18,8 +18,10 @@ import (
 	colour "github.com/bclicn/color"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
+
 	//"github.com/gorilla/sessions"
 	"github.com/srinathgs/mysqlstore"
+	"github.com/vend/peg/internal/pkg/config"
 	"github.com/vend/peg/internal/pkg/oxipay"
 	"github.com/vend/peg/internal/pkg/terminal"
 	"github.com/vend/peg/internal/pkg/vend"
@@ -51,36 +53,32 @@ type Response struct {
 	file         string
 }
 
-// DbConnection stores connection information for the database
-type DbConnection struct {
-	// @todo pull from config
-	username string
-	password string
-	host     string
-	name     string
-	timeout  time.Duration
-}
-
-// @todo load from config
+// DbSessionStore is the database session storage manager
 var DbSessionStore *mysqlstore.MySQLStore
 
 // SessionStore store of session data
 //var SessionStore *sessions.FilesystemStore
 
 func main() {
-	_ = oxipay.Ping()
-
-	connectionParams := &DbConnection{
-		username: "root",
-		password: "t9e3ioz0",
-		host:     "172.18.0.2",
-		name:     "vend",
-		timeout:  3600,
+	// default configuration file for prod
+	configurationFile := "/etc/vendproxy/vendproxy.json"
+	if os.Getenv("DEV") != "" {
+		// default configuration file for dev
+		configurationFile = "../../../configs/vendproxy.json"
 	}
 
-	db := connectToDatabase(connectionParams)
+	// load config
+	appConfig, err := config.ReadApplicationConfig(configurationFile)
+
+	if err != nil {
+		log.Fatalf("Configuration Error: %s ", err)
+	}
+
+	//connectionParams := appConfig.Database
+
+	db := connectToDatabase(appConfig.Database)
 	terminal.Db = db
-	DbSessionStore = initSessionStore(db, "mykey")
+	DbSessionStore = initSessionStore(db, appConfig.Session)
 
 	// We are hosting all of the content in ./assets, as the resources are
 	// required by the frontend.
@@ -105,18 +103,21 @@ func main() {
 	// @todo handle shutdowns
 }
 
-func initSessionStore(db *sql.DB, secureSessionKey string) *mysqlstore.MySQLStore {
+func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstore.MySQLStore {
 
-	store, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte("secretkey"))
-	store.Options = &sessions.Options{
-		Domain:   "",
-		Path:     "/",
-		MaxAge:   3600, // 8 hours
-		HttpOnly: true, // disable for this demo
-	}
+	// @todo support multiple keys from the config so that key rotation is possible
+	store, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte(sessionConfig.Secret))
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	store.Options = &sessions.Options{
+		Domain:   sessionConfig.Domain,
+		Path:     sessionConfig.Path,
+		MaxAge:   sessionConfig.MaxAge,   // 8 hours
+		HttpOnly: sessionConfig.HTTPOnly, // disable for this demo
+	}
+
 	//SessionStore = sessions.NewFilesystemStore("", []byte(secureSessionKey))
 
 	// register the type VendPaymentRequest so that we can use it later in the session
@@ -124,11 +125,11 @@ func initSessionStore(db *sql.DB, secureSessionKey string) *mysqlstore.MySQLStor
 	return store
 }
 
-func connectToDatabase(params *DbConnection) *sql.DB {
+func connectToDatabase(params config.DbConnection) *sql.DB {
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true&loc=Local", params.username, params.password, params.host, params.name)
+	dsn := fmt.Sprintf("%s:**redacted**@tcp(%s)/%s?parseTime=true&loc=Local", params.Username, params.Host, params.Name)
 
-	log.Printf(colour.BLightBlue("Attempting to connect to database %s \n"), dsn)
+	log.Printf("Attempting to connect to database %s \n", dsn)
 
 	// connect to the database
 	// @todo grab config
@@ -142,10 +143,11 @@ func connectToDatabase(params *DbConnection) *sql.DB {
 
 	// test to make sure it's all good
 	if err := db.Ping(); err != nil {
-		log.Printf(colour.Red("Unable to connect to database: %s on %"), params.name, params.host)
+		log.Printf("Unable to connect to database: %s on %", params.Name, params.Host)
 		log.Fatal(err)
 	}
-	db.SetConnMaxLifetime(params.timeout)
+	db.SetConnMaxLifetime(time.Duration(params.Timeout))
+	// log.Print("Db Connection Timeout set to : %", db.MaxConnLife)
 	return db
 }
 

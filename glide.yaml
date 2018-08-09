@@ -6,3 +6,5 @@ import:
 - package: github.com/ventu-io/go-shortid
 - package: github.com/bclicn/color
 - package: github.com/nu7hatch/gouuid
+- package: "github.com/micro/go-config"
+- package: "github.com/micro/go-config/source/file"
