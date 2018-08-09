@@ -64,7 +64,7 @@ func main() {
 	configurationFile := "/etc/vendproxy/vendproxy.json"
 	if os.Getenv("DEV") != "" {
 		// default configuration file for dev
-		configurationFile = "../../../configs/vendproxy.json"
+		configurationFile = "../configs/vendproxy.json"
 	}
 
 	// load config
@@ -127,7 +127,7 @@ func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstor
 
 func connectToDatabase(params config.DbConnection) *sql.DB {
 
-	dsn := fmt.Sprintf("%s:**redacted**@tcp(%s)/%s?parseTime=true&loc=Local", params.Username, params.Host, params.Name)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true&loc=Local", params.Username, params.Password, params.Host, params.Name)
 
 	log.Printf("Attempting to connect to database %s \n", dsn)
 
@@ -137,7 +137,7 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 	db, err := sql.Open("mysql", dsn)
 
 	if err != nil {
-		log.Printf(colour.Red("Unable to connect"))
+		log.Printf("Unable to connect")
 		log.Fatal(err)
 	}
 
@@ -147,7 +147,7 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 		log.Fatal(err)
 	}
 	db.SetConnMaxLifetime(time.Duration(params.Timeout))
-	// log.Print("Db Connection Timeout set to : %", db.MaxConnLife)
+	//log.Print("Db Connection Timeout set to : %", db.MaxLifetime)
 	return db
 }
 
@@ -299,12 +299,12 @@ func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *ter
 	response := &Response{}
 	oxipayResponseCode := oxipay.ProcessAuthorisationResponses()(oxipayResponse.Code)
 
-	// if oxipayResponse != nil || oxipayResponseCode.TxnStatus == "" {
+	if oxipayResponseCode != nil || oxipayResponseCode.TxnStatus == "" {
 
-	// 	response.Message = "Unable to estabilish communication with Oxipay"
-	// 	response.HTTPStatus = http.StatusBadRequest
-	// 	return response
-	// }
+		response.Message = "Unable to estabilish communication with Oxipay"
+		response.HTTPStatus = http.StatusBadRequest
+		return response
+	}
 
 	switch oxipayResponseCode.TxnStatus {
 	case oxipay.StatusApproved:
@@ -522,7 +522,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//
+	// Return a response to the browser bases on the response from Oxipay
 	response := processPaymentResponse(oxipayResponse, terminal, oxipayPayload)
 
 	sendResponse(w, r, response)
