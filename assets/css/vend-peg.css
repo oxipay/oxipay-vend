@@ -2244,3 +2244,19 @@ html {
 .buttons {
     margin-top: 40px;
 }
+
+label#paymentcodelabel {
+    text-align: center;
+    display: block;
+    margin-bottom: 20px;
+    font-size: 200%;
+
+}
+
+input#paymentcode {
+    display: block;
+    font-size: 24pt;
+    letter-spacing: 20px;
+    padding: 0px;
+    text-align: center;    
+}

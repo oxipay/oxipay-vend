@@ -13,24 +13,19 @@ import (
 	"testing"
 
 	uuid "github.com/nu7hatch/gouuid"
+	"github.com/vend/peg/internal/pkg/config"
 	"github.com/vend/peg/internal/pkg/oxipay"
 	"github.com/vend/peg/internal/pkg/terminal"
-	"github.com/vend/peg/internal/pkg/vend"
 	shortid "github.com/ventu-io/go-shortid"
 )
 
 var Db *sql.DB
 
 func TestMain(m *testing.M) {
-	// we need a database connection for most of the tests
-	connectionParams := &DbConnection{
-		username: "root",
-		password: "t9e3ioz0",
-		host:     "172.18.0.2",
-		name:     "vend",
-		timeout:  3600,
-	}
-	Db = connectToDatabase(connectionParams)
+	myConfig, _ := config.ReadApplicationConfig("../configs/vendproxy.json")
+	// we need a"" database connection for most of the tests
+
+	Db = connectToDatabase(myConfig.Database)
 	defer Db.Close()
 
 	terminal.Db = Db
@@ -41,6 +36,34 @@ func TestMain(m *testing.M) {
 	returnCode := m.Run()
 
 	os.Exit(returnCode)
+}
+
+func TestProcessAuthorisation(t *testing.T) {
+
+	terminal.Db = Db
+
+	terminal, err := terminal.GetRegisteredTerminal("https://amtest.vendhq.com", "0afa8de1-1442-11e8-edec-94863fd13a3c")
+	if err != nil {
+		t.Error(err)
+	}
+
+	reponse := `{"x_purchase_number":"52011913","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"3b715be8fdd67decd299cbb14ceeec3c76667d48e3468e4d3f343602d9b7d690","tracking_data":null}`
+
+	oxipayResponse := new(oxipay.OxipayResponse)
+	err = json.Unmarshal([]byte(reponse), oxipayResponse)
+	if err != nil {
+		t.Error(err)
+	}
+	isValid := oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey)
+
+	if isValid == false {
+		t.Error("Not a valid request")
+	}
+	browserResponse := processPaymentResponse(oxipayResponse, terminal, "4000")
+
+	if browserResponse.Status != statusAccepted {
+		t.Error("Expecting for the transaction to be accepted")
+	}
 }
 
 // TestTerminalSave tests saving a new terminal in the database for the registration phase
@@ -84,6 +107,7 @@ func TestTerminalUniqueSave(t *testing.T) {
 }
 
 // TestRegisterHandler  generating oxipay payload
+/*
 func TestRegisterHandler(t *testing.T) {
 
 	// Create a request to pass to our handler. We don't have any query parameters for now, so we'll
@@ -100,7 +124,7 @@ func TestRegisterHandler(t *testing.T) {
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	// add vars to the seesion to simulate a redirect
-	initSessionStore(Db, "ddddddddddddddddddd")
+	initSessionStore(Db)
 
 	session, err := SessionStore.Get(req, "oxipay")
 	if err != nil {
@@ -134,6 +158,7 @@ func TestRegisterHandler(t *testing.T) {
 			status, http.StatusOK)
 	}
 }
+*/
 
 // TestGeneratePayload generating oxipay payload assumes a registered device
 // with both Oxipay and the local database

@@ -143,7 +143,7 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 
 	// test to make sure it's all good
 	if err := db.Ping(); err != nil {
-		log.Printf("Unable to connect to database: %s on %", params.Name, params.Host)
+		log.Printf("Unable to connect to database: %s on %s", params.Name, params.Host)
 		log.Fatal(err)
 	}
 	db.SetConnMaxLifetime(time.Duration(params.Timeout))
@@ -222,19 +222,26 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				browserResponse.Message = "We are unable to process this request "
 				browserResponse.HTTPStatus = http.StatusBadGateway
 			}
-			browserResponse = processRegistrationResponse(response, vendPaymentRequest, registrationPayload)
 
+			// ensure the response came from Oxipay
+			// @todo doesn't deal with negative response right
+			if !response.Authenticate(registrationPayload.DeviceToken) {
+				browserResponse.Message = "The signature does not match the expected signature"
+				browserResponse.HTTPStatus = http.StatusBadRequest
+			} else {
+				// process the response
+				browserResponse = processRegistrationResponse(response, vendPaymentRequest, registrationPayload)
+			}
 		} else {
 			log.Print("Error: " + err.Error())
 			browserResponse.Message = "Sorry. We are unable to process this registration. Please contact support"
 			browserResponse.HTTPStatus = http.StatusBadRequest
 		}
-		break
 	default:
 		browserResponse.HTTPStatus = http.StatusOK
 		browserResponse.file = "../assets/templates/register.html"
-		break
 	}
+
 	log.Print(browserResponse.Message)
 	sendResponse(w, r, browserResponse)
 	return
@@ -288,7 +295,7 @@ func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.Pay
 	return browserResponse
 }
 
-func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *terminal.Terminal, oxipayPayload *oxipay.OxipayPayload) *Response {
+func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *terminal.Terminal, amount string) *Response {
 
 	// Specify an external transaction ID. This value can be sent back to Vend with
 	// the "ACCEPT" step as the JSON key "transaction_id".
@@ -299,7 +306,7 @@ func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *ter
 	response := &Response{}
 	oxipayResponseCode := oxipay.ProcessAuthorisationResponses()(oxipayResponse.Code)
 
-	if oxipayResponseCode != nil || oxipayResponseCode.TxnStatus == "" {
+	if oxipayResponseCode == nil || oxipayResponseCode.TxnStatus == "" {
 
 		response.Message = "Unable to estabilish communication with Oxipay"
 		response.HTTPStatus = http.StatusBadRequest
@@ -309,25 +316,21 @@ func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *ter
 	switch oxipayResponseCode.TxnStatus {
 	case oxipay.StatusApproved:
 		log.Println(oxipayResponseCode.LogMessage)
-		response.Amount = oxipayPayload.PurchaseAmount
+		response.Amount = amount
 		response.ID = oxipayResponse.PurchaseNumber
 		response.Status = statusAccepted
 		response.HTTPStatus = http.StatusOK
 		response.Message = oxipayResponseCode.CustomerMessage
-		break
 	case oxipay.StatusDeclined:
 		response.HTTPStatus = http.StatusOK
 		response.ID = ""
 		response.Status = statusDeclined
 		response.Message = oxipayResponseCode.CustomerMessage
-		break
-
 	case oxipay.StatusFailed:
 		response.HTTPStatus = http.StatusOK
 		response.ID = ""
 		response.Status = statusFailed
 		response.Message = oxipayResponseCode.CustomerMessage
-		break
 	default:
 		// default to fail...not sure if this is right
 		response.HTTPStatus = http.StatusOK
@@ -335,7 +338,6 @@ func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *ter
 		response.Status = statusFailed
 		response.Message = oxipayResponseCode.CustomerMessage
 	}
-
 	return response
 }
 
@@ -464,6 +466,7 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 // payment gateway.
 func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	var vReq *vend.PaymentRequest
+	var browserResponse *Response
 	var err error
 
 	logRequest(r)
@@ -522,10 +525,17 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return a response to the browser bases on the response from Oxipay
-	response := processPaymentResponse(oxipayResponse, terminal, oxipayPayload)
+	// ensure the response has come from Oxipay
+	if !oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey) {
+		browserResponse.Message = "The signature does not match the expected signature"
+		browserResponse.HTTPStatus = http.StatusBadRequest
+	} else {
+		// Return a response to the browser bases on the response from Oxipay
+		browserResponse = processPaymentResponse(oxipayResponse, terminal, oxipayPayload.PurchaseAmount)
+	}
 
-	sendResponse(w, r, response)
+	sendResponse(w, r, browserResponse)
+
 	return
 
 }

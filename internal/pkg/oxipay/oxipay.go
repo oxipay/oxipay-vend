@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+	"strings"
 )
 
 // Version  which version of the proxy are we using
@@ -60,22 +61,22 @@ type OxipayPayload struct {
 
 // OxipayResponse is the response returned from Oxipay for both a CreateKey and Sales Adjustment
 type OxipayResponse struct {
-	PurchaseNumber string `json:"x_purchase_number"`
-	Status         string `json:"x_status"`
-	Code           string `json:"x_code"`
+	PurchaseNumber string `json:"x_purchase_number,omitempty"`
+	Status         string `json:"x_status,omitempty"`
+	Code           string `json:"x_code,omitempty"`
 	Message        string `json:"x_message"`
 	Key            string `json:"x_key,omitempty"`
 	Signature      string `json:"signature"`
 }
 
 // Terminal terminal mapping
-type Terminal struct {
-	FxlRegisterID       string // Oxipay registerid
-	FxlSellerID         string
-	FxlDeviceSigningKey string
-	Origin              string
-	VendRegisterID      string
-}
+// type Terminal struct {
+// 	FxlRegisterID       string // Oxipay registerid
+// 	FxlSellerID         string
+// 	FxlDeviceSigningKey string
+// 	Origin              string
+// 	VendRegisterID      string
+// }
 
 // Ping returns pong
 func Ping() string {
@@ -175,6 +176,16 @@ func (payload *OxipayRegistrationPayload) Validate() error {
 	return nil
 }
 
+//Authenticate validates HMAC
+func (r *OxipayResponse) Authenticate(key string) bool {
+	responsePlainText := GeneratePlainTextSignature(r)
+
+	if len(r.Signature) >= 0 {
+		return CheckMAC([]byte(responsePlainText), []byte(r.Signature), []byte(key))
+	}
+	return false
+}
+
 // GeneratePlainTextSignature will generate an Oxipay plain text message ready for signing
 func GeneratePlainTextSignature(payload interface{}) string {
 
@@ -198,6 +209,11 @@ func GeneratePlainTextSignature(payload interface{}) string {
 
 		data := field.Interface()
 		tag := ftype.Tag.Get("json")
+		idx := strings.Index(tag, ",")
+		if idx > 0 {
+			tag = tag[:idx]
+		}
+
 		payloadList[tag] = data.(string)
 
 	}
@@ -211,7 +227,7 @@ func GeneratePlainTextSignature(payload interface{}) string {
 		// there shouldn't be any nil values
 		// Signature needs to be populated with the actual HMAC
 		// calld
-		if v[0:2] == "x_" {
+		if v[0:2] == "x_" && payloadList[v] != "" {
 			buffer.WriteString(fmt.Sprintf("%s%s", v, payloadList[v]))
 		}
 	}
@@ -221,14 +237,24 @@ func GeneratePlainTextSignature(payload interface{}) string {
 }
 
 // CheckMAC used to validate responses from the remote server
-func CheckMAC(message, messageMAC, key []byte) bool {
+func CheckMAC(message []byte, messageMAC []byte, key []byte) bool {
 	mac := hmac.New(sha256.New, key)
-	mac.Write(message)
+	_, err := mac.Write(message)
 
-	expectedMAC := mac.Sum(nil)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	expectedMAC := hex.EncodeToString(mac.Sum(nil))
 
 	// we use hmac.Equal because regular equality (i.e == ) is subject to timing attacks
-	return hmac.Equal(messageMAC, expectedMAC)
+	isGood := hmac.Equal(messageMAC, []byte(expectedMAC))
+
+	if isGood == false {
+		log.Printf("Signature mismatch: expected %s, got %s \n", messageMAC, expectedMAC)
+	}
+	return isGood
 }
 
 // ResponseCode maps the oxipay response code to a generic ACCEPT/DECLINE
