@@ -75,7 +75,6 @@ func main() {
 	}
 
 	//connectionParams := appConfig.Database
-
 	db := connectToDatabase(appConfig.Database)
 	terminal.Db = db
 	DbSessionStore = initSessionStore(db, appConfig.Session)
@@ -87,6 +86,7 @@ func main() {
 	http.HandleFunc("/", Index)
 	http.HandleFunc("/pay", PaymentHandler)
 	http.HandleFunc("/register", RegisterHandler)
+	http.HandleFunc("/refund", RefundHandler)
 
 	// The default port is 500, but one can be specified as an env var if needed.
 	port := "5000"
@@ -206,6 +206,12 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		err = registrationPayload.Validate()
+		if err != nil {
+			browserResponse.HTTPStatus = http.StatusBadRequest
+			browserResponse.Message = err.Error()
+			sendResponse(w, r, browserResponse)
+			return
+		}
 
 		vendPaymentRequest, err := getPaymentRequestFromSession(r)
 
@@ -224,7 +230,6 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// ensure the response came from Oxipay
-			// @todo doesn't deal with negative response right
 			if !response.Authenticate(registrationPayload.DeviceToken) {
 				browserResponse.Message = "The signature does not match the expected signature"
 				browserResponse.HTTPStatus = http.StatusBadRequest
@@ -397,7 +402,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	origin := r.Form.Get("origin")
 	origin, _ = url.PathUnescape(origin)
 
-	// @todo new payment request
+	// @todo add NewPaymentRequest method
 	vReq := &vend.PaymentRequest{
 		Amount:     r.Form.Get("amount"),
 		Origin:     origin,
@@ -415,33 +420,47 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	// we just want to ensure there is a terminal available
 	_, err = terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
 
+	// register the device if needed
 	if err != nil {
 
-		// we don't have a valid terminal
-		// save the initial request vars in the session
-		// and then redirect to the register their terminal
-		//session.Values["registerId"] = vReq.registerID
-		//session.Values["origin"] = vReq.origin
-		session, err := getSession(r, "oxipay")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		session.Values["vReq"] = vReq
-
-		err = sessions.Save(r, w)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Println("Session initiated")
+		saveToSession(w, r, vReq)
 
 		// redirect
 		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
 
-	http.ServeFile(w, r, "../assets/templates/index.html")
+	// refunds are triggered by a negative amount
+	if vReq.AmountFloat > 0 {
+		// payment
+		http.ServeFile(w, r, "../assets/templates/index.html")
+	} else {
+		// save the details of the original request
+		saveToSession(w, r, vReq)
+
+		// refund
+		http.ServeFile(w, r, "../assets/templates/refund.html")
+	}
+}
+
+func saveToSession(w http.ResponseWriter, r *http.Request, vReq *vend.PaymentRequest) {
+	// we don't have a valid terminal
+	// save the initial request vars in the session
+	// and then redirect to the register their terminal
+	//session.Values["registerId"] = vReq.registerID
+	//session.Values["origin"] = vReq.origin
+	session, err := getSession(r, "oxipay")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	session.Values["vReq"] = vReq
+	err = sessions.Save(r, w)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Session initiated")
 }
 
 func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
@@ -460,6 +479,27 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 	vReq, err := validPaymentRequest(vReq)
 
 	return vReq, err
+}
+
+// RefundHandler handles performing a refund
+func RefundHandler(w http.ResponseWriter, r *http.Request) {
+	var vReq *vend.PaymentRequest
+	var browserResponse *Response
+	var err error
+
+	logRequest(r)
+
+	// vReq, err = bindToRefundPayload(r)
+	if err != nil {
+		log.Print(err)
+		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
+	}
+
+	_ = err
+	_ = browserResponse
+	_ = vReq
+
+	return
 }
 
 // PaymentHandler receives the payment request from Vend and sends it to the
@@ -569,19 +609,21 @@ func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 }
 
 func validPaymentRequest(req *vend.PaymentRequest) (*vend.PaymentRequest, error) {
+	var err error
 
 	// convert the amount to cents and then go back to a string for
 	// the checksum
 	if len(req.Amount) < 1 {
 		return req, errors.New("Amount is required")
 	}
-	amountFloat, err := strconv.ParseFloat(req.Amount, 64)
+	req.AmountFloat, err = strconv.ParseFloat(req.Amount, 64)
 	if err != nil {
 		return req, err
 	}
 
-	// probably not great that we are mutating the value directly but it's ok
-	// for now. If it gets excessive we can return a copy
-	req.Amount = strconv.FormatFloat((amountFloat * 100), 'f', 0, 64)
+	// Oxipay deals with cents.
+	// Probably not great that we are mutating the value directly
+	// If it gets problematic we can return a copy
+	req.Amount = strconv.FormatFloat((req.AmountFloat * 100), 'f', 0, 64)
 	return req, err
 }

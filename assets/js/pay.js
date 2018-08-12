@@ -185,6 +185,70 @@ function checkResponse(response) {
   }
 }
 
+// sendRefund sends refund to the gateway
+function sendRefund() {
+
+  // grab the purchase no from form
+  var paymentCode = $("#paymentcode").val()
+
+  // Hide outcome buttons.
+  $('#outcomes').hide()
+  
+
+  // Show tap insert or swipe card prompt.
+  $('#statusMessage').empty()
+  $.get('../assets/templates/payment.html', function (data) {
+    $('#statusMessage').append(data)
+  })
+  // Get the payment context from the URL query string.
+  var result = {}
+  result = getURLParameters()
+
+  // If we did not at least two query params from Vend something is wrong.
+  if (Object.keys(result).length < 2) {
+    console.log('did not get at least two query results')
+    $('#statusMessage').empty()
+    $.get('../assets/templates/failed.html', function (data) {
+      $('#statusMessage').append(data)
+    })
+    setTimeout(exitStep(), 4000)
+  }
+  
+  $.ajax({
+      url: '/refund',
+      type: 'POST',
+      dataType: 'json',
+      data: {
+        amount: result.amount,
+        origin: result.origin,
+        register_id: result.register_id,
+        purchaseno: purchaseno
+      }
+    })
+    .done(function (response) {
+      console.log(response)
+
+      // Hide outcome buttons while we handle the response.
+      $('#outcomes').hide()
+
+      // Check the response body and act according to the payment status.
+      checkResponse(response)
+    })
+    .fail(function (error) {
+      console.log(error)
+
+      // Make sure status text is cleared.
+      $('#outcomes').hide()
+      $('#statusMessage').empty()
+      $.get('../assets/templates/failed.html', function (data) {
+        $('#statusMessage').append(data)
+      })
+      // Quit window, giving cashier chance to try again.
+      setTimeout(declineStep, 4000)
+    })
+
+}
+
 // sendPayment sends payment context to the gateway to begin processing the
 // payment.
 function sendPayment(outcome) {
@@ -194,7 +258,6 @@ function sendPayment(outcome) {
 
   // Hide outcome buttons.
   $('#outcomes').hide()
-
   
 
   // Show tap insert or swipe card prompt.
