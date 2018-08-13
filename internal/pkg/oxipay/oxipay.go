@@ -28,8 +28,7 @@ var ProcessAuthorisationURL = GatewayURL + "/ProcessAuthorisation"
 // CreateKeyURL is the URL of the POS API for CreateKey
 var CreateKeyURL = GatewayURL + "/CreateKey"
 
-// Db connection to database
-// var Db *sql.DB
+var ProcessSalesAdjustmentURL = GatewayURL + "/ProcessSalesAdjustment"
 
 //HTTPClientTimout default http client timeout
 const HTTPClientTimout = 0
@@ -69,14 +68,18 @@ type OxipayResponse struct {
 	Signature      string `json:"signature"`
 }
 
-// Terminal terminal mapping
-// type Terminal struct {
-// 	FxlRegisterID       string // Oxipay registerid
-// 	FxlSellerID         string
-// 	FxlDeviceSigningKey string
-// 	Origin              string
-// 	VendRegisterID      string
-// }
+// OxipaySalesAdjustmentPayload holds a request to Oxipay for the ProcessAdjustment
+type OxipaySalesAdjustmentPayload struct {
+	PosTransactionRef string `json:"x_pos_transaction_ref"`
+	PurchaseRef       string `json:"x_purchase_ref"`
+	MerchantID        string `json:"x_merchant_id"`
+	Amount            string `json:"x_amount,omitempty"`
+	DeviceID          string `json:"x_device_id,omitempty"`
+	OperatorID        string `json:"x_operator_id,omitempty"`
+	FirmwareVersion   string `json:"x_firmware_version,omitempty"`
+	TrackingData      string `json:"tracking_data,omitempty"`
+	Signature         string `json:"signature"`
+}
 
 // Ping returns pong
 func Ping() string {
@@ -153,6 +156,42 @@ func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 
 	log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
 	return oxipayResponse, err
+}
+
+// ProcessSalesAdjustment provides a mechansim to perform a sales ajustment on an Oxipay schedule
+func ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayResponse, error) {
+
+	var err error
+	oxipayResponse := new(OxipayResponse)
+
+	jsonValue, _ := json.Marshal(adjustment)
+	log.Printf("POST to URL %s \n", ProcessSalesAdjustmentURL)
+	log.Println(": " + string(jsonValue))
+
+	client := http.Client{}
+	client.Timeout = HTTPClientTimout
+	response, responseErr := client.Post(ProcessSalesAdjustmentURL, "application/json", bytes.NewBuffer(jsonValue))
+
+	if responseErr != nil {
+		return oxipayResponse, responseErr
+	}
+	defer response.Body.Close()
+
+	log.Println("ProcessSalesAdjustment Response Status:", response.Status)
+	log.Println("ProcessSalesAdjustment Response Headers:", response.Header)
+
+	body, _ := ioutil.ReadAll(response.Body)
+	log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
+
+	err = json.Unmarshal(body, oxipayResponse)
+
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
+	return oxipayResponse, err
+
 }
 
 // SignMessage will generate an HMAC of the plaintext
@@ -273,6 +312,19 @@ const (
 	StatusFailed = "FAILED"
 )
 
+// ResponseType The type of response received from Oxipay
+type ResponseType int
+
+const (
+	// Adjustment ProcessSalesAdjustment
+	Adjustment ResponseType = iota
+	// Authorisation ProcessAuthorisation
+	Authorisation ResponseType = iota
+
+	// Registration Result of CreateKey
+	Registration ResponseType = iota
+)
+
 // ProcessAuthorisationResponses provides a guarded response type based on the response code from the Oxipay request
 func ProcessAuthorisationResponses() func(string) *responseCode {
 
@@ -357,6 +409,97 @@ func ProcessAuthorisationResponses() func(string) *responseCode {
 			TxnStatus:  StatusFailed,
 			LogMessage: "Request is invalid",
 			CustomerMessage: `The request to Oxipay was invalid. 
+			You can try again with a different Payment Code. 
+			Please contact pit@oxipay.com.au for further support`,
+		},
+		"ESIG01": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
+			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+		},
+		"EISE01": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Server Error",
+			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+		},
+	}
+
+	return func(key string) *responseCode {
+		// check to make sure we know what the response is
+		ret := innerMap[key]
+
+		if ret == nil {
+			return innerMap["EISE01"]
+		}
+		return ret
+	}
+}
+
+// ProcessSalesAdjustmentResponse provides a guarded response type based on the response code from the Oxipay request
+func ProcessSalesAdjustmentResponse() func(string) *responseCode {
+
+	innerMap := map[string]*responseCode{
+		"SPSA01": &responseCode{
+			TxnStatus:       StatusApproved,
+			LogMessage:      "APPROVED",
+			CustomerMessage: "APPROVED",
+		},
+		"FPSA01": &responseCode{
+			TxnStatus:       StatusDeclined,
+			LogMessage:      "Unable to find the specified POS transaction reference",
+			CustomerMessage: "Unable to find the specified POS transaction reference",
+		},
+		"FPSA02": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "This contract has already been completed",
+			CustomerMessage: "This contract has already been completed",
+		},
+		"FPSA03": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "This Oxipay contract has previously been cancelled and all payments collected have been refunded to the customer",
+			CustomerMessage: "This Oxipay contract has previously been cancelled and all payments collected have been refunded to the customer",
+		},
+		"FPSA04": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Sales adjustment cannot be processed for this amount",
+			CustomerMessage: "Sales adjustment cannot be processed for this amount",
+		},
+		"FPSA05": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Unable to process a sales adjustment for this contract. Please contact Merchant Services during business hours for further information",
+			CustomerMessage: "Unable to process a sales adjustment for this contract. Please contact Merchant Services during business hours for further information",
+		},
+		"FPSA06": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Sales adjustment cannot be processed. Please call Oxipay Collections",
+			CustomerMessage: "Sales adjustment cannot be processed. Please call Oxipay Collections",
+		},
+		"FPSA07": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Sales adjustment cannot be processed at this store",
+			CustomerMessage: "Sales adjustment cannot be processed at this store",
+		},
+		"FPSA08": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Sales adjustment cannot be processed for this transaction. Duplicate receipt number found.",
+			CustomerMessage: "Sales adjustment cannot be processed for this transaction. Duplicate receipt number found.",
+		},
+		"FPSA09": &responseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Amount must be greater than 0.",
+			CustomerMessage: "Amount must be greater than 0.",
+		},
+		"EAUT01": &responseCode{
+			TxnStatus:  StatusFailed,
+			LogMessage: "Authentication to gateway error",
+			CustomerMessage: `The request to Oxipay was not what we were expecting. 
+			You can try again with a different Payment Code. 
+			Please contact pit@oxipay.com.au for further support`,
+		},
+		"EVAL01": &responseCode{
+			TxnStatus:  StatusFailed,
+			LogMessage: "Request is invalid",
+			CustomerMessage: `The request to Oxipay was what we were expecting. 
 			You can try again with a different Payment Code. 
 			Please contact pit@oxipay.com.au for further support`,
 		},

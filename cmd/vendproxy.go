@@ -59,6 +59,9 @@ var DbSessionStore *mysqlstore.MySQLStore
 // SessionStore store of session data
 //var SessionStore *sessions.FilesystemStore
 
+// AppConfig currently running application config
+var AppConfig *config.HostConfig
+
 func main() {
 	// default configuration file for prod
 	configurationFile := "/etc/vendproxy/vendproxy.json"
@@ -70,11 +73,13 @@ func main() {
 	// load config
 	appConfig, err := config.ReadApplicationConfig(configurationFile)
 
+	// configure Oxipay Module
+	oxipay.GatewayURL = appConfig.Oxipay.GatewayURL
+
 	if err != nil {
 		log.Fatalf("Configuration Error: %s ", err)
 	}
 
-	//connectionParams := appConfig.Database
 	db := connectToDatabase(appConfig.Database)
 	terminal.Db = db
 	DbSessionStore = initSessionStore(db, appConfig.Session)
@@ -89,12 +94,13 @@ func main() {
 	http.HandleFunc("/refund", RefundHandler)
 
 	// The default port is 500, but one can be specified as an env var if needed.
-	port := "5000"
+	port := appConfig.Webserver.Port
+
 	if os.Getenv("PORT") != "" {
 		port = os.Getenv("PORT")
 	}
 
-	log.Printf("Starting webserver on port %s \n", port)
+	log.Printf("Starting webserver on port %d \n", port)
 
 	//defer sessionStore.Close()
 
@@ -300,7 +306,7 @@ func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.Pay
 	return browserResponse
 }
 
-func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *terminal.Terminal, amount string) *Response {
+func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, responseType oxpay.ResponseType, terminal *terminal.Terminal, amount string) *Response {
 
 	// Specify an external transaction ID. This value can be sent back to Vend with
 	// the "ACCEPT" step as the JSON key "transaction_id".
@@ -309,7 +315,17 @@ func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, terminal *ter
 	// Build our response content, including the amount approved and the Vend
 	// register that originally sent the payment.
 	response := &Response{}
-	oxipayResponseCode := oxipay.ProcessAuthorisationResponses()(oxipayResponse.Code)
+
+	var oxipayResponseCode oxipayResponse.Code
+	switch responseType {
+	case oxipay.Authorisation:
+		oxipayResponseCode = oxipay.ProcessAuthorisationResponses()
+	case oxipay.Adjustment:
+		oxipayResponseCode := oxipay.ProcessSalesAdjustmentResponse()
+	case oxipay.Registration:
+		// @todo
+
+	}
 
 	if oxipayResponseCode == nil || oxipayResponseCode.TxnStatus == "" {
 
@@ -483,22 +499,74 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 
 // RefundHandler handles performing a refund
 func RefundHandler(w http.ResponseWriter, r *http.Request) {
-	var vReq *vend.PaymentRequest
+	var vReq *vend.RefundRequest
 	var browserResponse *Response
 	var err error
 
 	logRequest(r)
 
 	// vReq, err = bindToRefundPayload(r)
+	vReq, err = getPaymentRequestFromSession(r).(vend.RefundRequest)
+
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
 	}
 
-	_ = err
-	_ = browserResponse
-	_ = vReq
+	vReq.PurchaseNumber = r.Form.Get("PurchaseNumber")
 
+	terminal, err := terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
+	if err != nil {
+		// redirect to registration page
+		http.Redirect(w, r, "/register", http.StatusFound)
+		return
+	}
+
+	txnRef, err := shortid.Generate()
+	var oxipayPayload = &oxipay.OxipaySalesAdjustmentPayload{
+		DeviceID:          terminal.FxlRegisterID,
+		FirmwareVersion:   "vend_integration_v0.0.1",
+		OperatorID:        "Vend",
+		PosTransactionRef: txnRef,
+	}
+
+	// generate the plaintext for the signature
+	plainText := oxipay.GeneratePlainTextSignature(oxipayPayload)
+	log.Printf("Oxipay plain text: %s \n", plainText)
+
+	// sign the message
+	oxipayPayload.Signature = oxipay.SignMessage(plainText, terminal.FxlDeviceSigningKey)
+	log.Printf("Oxipay signature: %s \n", oxipayPayload.Signature)
+
+	// send authorisation to the Oxipay POS API
+	oxipayResponse, err := oxipay.ProcessAuthorisation(oxipayPayload)
+
+	if err != nil {
+		http.Error(w, "There was a problem processing the request", http.StatusInternalServerError)
+		// log the raw response
+		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
+		log.Printf(colour.Red(msg))
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "There was a problem processing the request", http.StatusInternalServerError)
+		// log the raw response
+		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
+		log.Printf(colour.Red(msg))
+		return
+	}
+
+	// ensure the response has come from Oxipay
+	if !oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey) {
+		browserResponse.Message = "The signature does not match the expected signature"
+		browserResponse.HTTPStatus = http.StatusBadRequest
+	} else {
+		// Return a response to the browser bases on the response from Oxipay
+		browserResponse = processPaymentResponse(oxipayResponse, terminal, oxipayPayload.PurchaseAmount)
+	}
+
+	sendResponse(w, r, browserResponse)
 	return
 }
 

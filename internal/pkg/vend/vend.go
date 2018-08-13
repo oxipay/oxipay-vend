@@ -8,3 +8,12 @@ type PaymentRequest struct {
 	Code        string
 	AmountFloat float64
 }
+
+// RefundRequest is the originating request from vend
+type RefundRequest struct {
+	Amount         string
+	Origin         string
+	RegisterID     string
+	PurchaseNumber string
+	AmountFloat    float64
+}

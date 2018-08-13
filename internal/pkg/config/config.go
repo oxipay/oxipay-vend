@@ -37,15 +37,22 @@ type HostConfig struct {
 	Webserver  WebserverConfig `json:"webserver"`
 	Database   DbConnection    `json:"database"`
 	Session    SessionConfig   `json:"session"`
+	Oxipay     OxipayConfig    `json:"oxipay"`
 	Background bool            `json:"background"`
 	Debug      bool            `json:"debug"`
+}
+
+// OxipayConfig data structure that represents a valid Oxipay configuration file entry
+type OxipayConfig struct {
+	GatewayURL string `json:"gateway_url"`
 }
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
 func ReadApplicationConfig(configFile string) (HostConfig, error) {
 
 	conf := micro.NewConfig()
-	// Load toml file with encoder
+	// Load json file with encoder
+	// @todo test environment override
 	err := conf.Load(
 		file.NewSource(file.WithPath(configFile)),
 		//		env.NewSource(),
