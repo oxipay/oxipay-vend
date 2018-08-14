@@ -20,16 +20,9 @@ import (
 const Version string = "1.0"
 
 // GatewayURL Default URL for the Oxipay Gateway @todo get from config
-var GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
+var GatewayURL = ""
 
-// ProcessAuthorisationURL is the URL of the POS API for ProcessAuthoorisation
-var ProcessAuthorisationURL = GatewayURL + "/ProcessAuthorisation"
-
-// CreateKeyURL is the URL of the POS API for CreateKey
-var CreateKeyURL = GatewayURL + "/CreateKey"
-
-// ProcessSalesAdjustmentURL is the URL of the POS API for refunds
-var ProcessSalesAdjustmentURL = GatewayURL + "/ProcessSalesAdjustment"
+// var GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
 
 //HTTPClientTimout default http client timeout
 const HTTPClientTimout = 0
@@ -119,6 +112,8 @@ func Ping() string {
 // RegisterPosDevice is used to register a new vend terminal
 func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
 	var err error
+	var CreateKeyURL = GatewayURL + "/CreateKey"
+
 	oxipayResponse := new(OxipayResponse)
 
 	jsonValue, _ := json.Marshal(payload)
@@ -156,6 +151,9 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 // ProcessAuthorisation calls the ProcessAuthorisation Method
 func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
 
+	// ProcessAuthorisationURL is the URL of the POS API for ProcessAuthoorisation
+	var ProcessAuthorisationURL = GatewayURL + "/ProcessAuthorisation"
+
 	var err error
 	oxipayResponse := new(OxipayResponse)
 
@@ -192,6 +190,10 @@ func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 func ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayResponse, error) {
 
 	var err error
+
+	// ProcessSalesAdjustmentURL is the URL of the POS API for refunds
+	var ProcessSalesAdjustmentURL = GatewayURL + "/ProcessSalesAdjustment"
+
 	oxipayResponse := new(OxipayResponse)
 
 	jsonValue, _ := json.Marshal(adjustment)

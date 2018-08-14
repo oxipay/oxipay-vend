@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	colour "github.com/bclicn/color"
@@ -499,7 +500,8 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	var browserResponse *Response
 	var err error
 
-	logRequest(r)
+	//logRequest(r)
+	r.ParseForm()
 
 	// vReq, err = bindToRefundPayload(r)
 	x, err := getPaymentRequestFromSession(r)
@@ -507,15 +509,15 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
+		return
 	}
 	vReq := vend.RefundRequest{
-		Amount:      x.Amount,
-		Origin:      x.Origin,
-		RegisterID:  x.RegisterID,
-		AmountFloat: x.AmountFloat,
+		Amount:         x.Amount,
+		Origin:         x.Origin,
+		RegisterID:     x.RegisterID,
+		AmountFloat:    x.AmountFloat,
+		PurchaseNumber: r.Form.Get("purchaseno"),
 	}
-
-	vReq.PurchaseNumber = r.Form.Get("PurchaseNumber")
 
 	terminal, err := terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
 	if err != nil {
@@ -527,9 +529,12 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	txnRef, err := shortid.Generate()
 	var oxipayPayload = &oxipay.OxipaySalesAdjustmentPayload{
 		DeviceID:          terminal.FxlRegisterID,
+		PurchaseRef:       vReq.PurchaseNumber,
 		FirmwareVersion:   "vend_integration_v0.0.1",
 		OperatorID:        "Vend",
+		MerchantID:        terminal.FxlSellerID,
 		PosTransactionRef: txnRef,
+		Amount:            strings.Replace(vReq.Amount, "-", "", -1),
 	}
 
 	// generate the plaintext for the signature
@@ -560,6 +565,7 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ensure the response has come from Oxipay
+	// there is a bug in Oxipay that error don't include signatures
 	if !oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey) {
 		browserResponse.Message = "The signature does not match the expected signature"
 		browserResponse.HTTPStatus = http.StatusBadRequest
