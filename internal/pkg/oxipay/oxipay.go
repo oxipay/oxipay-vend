@@ -28,6 +28,7 @@ var ProcessAuthorisationURL = GatewayURL + "/ProcessAuthorisation"
 // CreateKeyURL is the URL of the POS API for CreateKey
 var CreateKeyURL = GatewayURL + "/CreateKey"
 
+// ProcessSalesAdjustmentURL is the URL of the POS API for refunds
 var ProcessSalesAdjustmentURL = GatewayURL + "/ProcessSalesAdjustment"
 
 //HTTPClientTimout default http client timeout
@@ -80,6 +81,35 @@ type OxipaySalesAdjustmentPayload struct {
 	TrackingData      string `json:"tracking_data,omitempty"`
 	Signature         string `json:"signature"`
 }
+
+// ResponseCode maps the oxipay response code to a generic ACCEPT/DECLINE
+type ResponseCode struct {
+	TxnStatus       string
+	LogMessage      string
+	CustomerMessage string
+}
+
+const (
+	// StatusApproved Transaction Successful
+	StatusApproved = "APPROVED"
+	// StatusDeclined Transaction Declined
+	StatusDeclined = "DECLINED"
+	// StatusFailed Transaction Failed
+	StatusFailed = "FAILED"
+)
+
+// ResponseType The type of response received from Oxipay
+type ResponseType int
+
+const (
+	// Adjustment ProcessSalesAdjustment
+	Adjustment ResponseType = iota
+	// Authorisation ProcessAuthorisation
+	Authorisation ResponseType = iota
+
+	// Registration Result of CreateKey
+	Registration ResponseType = iota
+)
 
 // Ping returns pong
 func Ping() string {
@@ -296,135 +326,106 @@ func CheckMAC(message []byte, messageMAC []byte, key []byte) bool {
 	return isGood
 }
 
-// ResponseCode maps the oxipay response code to a generic ACCEPT/DECLINE
-type responseCode struct {
-	TxnStatus       string
-	LogMessage      string
-	CustomerMessage string
-}
-
-const (
-	// StatusApproved Transaction Successful
-	StatusApproved = "APPROVED"
-	// StatusDeclined Transaction Declined
-	StatusDeclined = "DECLINED"
-	// StatusFailed Transaction Failed
-	StatusFailed = "FAILED"
-)
-
-// ResponseType The type of response received from Oxipay
-type ResponseType int
-
-const (
-	// Adjustment ProcessSalesAdjustment
-	Adjustment ResponseType = iota
-	// Authorisation ProcessAuthorisation
-	Authorisation ResponseType = iota
-
-	// Registration Result of CreateKey
-	Registration ResponseType = iota
-)
-
 // ProcessAuthorisationResponses provides a guarded response type based on the response code from the Oxipay request
-func ProcessAuthorisationResponses() func(string) *responseCode {
+func ProcessAuthorisationResponses() func(string) *ResponseCode {
 
-	innerMap := map[string]*responseCode{
-		"SPRA01": &responseCode{
+	innerMap := map[string]*ResponseCode{
+		"SPRA01": &ResponseCode{
 			TxnStatus:       StatusApproved,
 			LogMessage:      "APPROVED",
 			CustomerMessage: "APPROVED",
 		},
-		"FPRA01": &responseCode{
+		"FPRA01": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined due to internal risk assessment against the customer",
 			CustomerMessage: "Do not try again",
 		},
-		"FPRA02": &responseCode{
+		"FPRA02": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined due to insufficient funds for the deposit",
 			CustomerMessage: "Please call customer support",
 		},
-		"FPRA03": &responseCode{
+		"FPRA03": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Declined as communication to the bank is currently unavailable",
 			CustomerMessage: "Please try again shortly. Communication to the bank is unavailable",
 		},
-		"FPRA04": &responseCode{
+		"FPRA04": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because the customer limit has been exceeded",
 			CustomerMessage: "Please contact Oxipay customer support",
 		},
-		"FPRA05": &responseCode{
+		"FPRA05": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined due to negative payment history for the customer",
 			CustomerMessage: "Please contact Oxipay customer support for more information",
 		},
-		"FPRA06": &responseCode{
+		"FPRA06": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because the credit-card used for the deposit is expired",
 			CustomerMessage: "Declined because the credit-card used for the deposit is expired",
 		},
-		"FPRA07": &responseCode{
+		"FPRA07": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because supplied POSTransactionRef has already been processed",
 			CustomerMessage: "We have seen this Transaction ID before, please try again",
 		},
-		"FPRA08": &responseCode{
+		"FPRA08": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because the instalment amount was below the minimum threshold",
 			CustomerMessage: "Transaction below minimum",
 		},
-		"FPRA09": &responseCode{
+		"FPRA09": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because purchase amount exceeded pre-approved amount",
 			CustomerMessage: "Please contact Oxipay customer support",
 		},
-		"FPRA21": &responseCode{
+		"FPRA21": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "The Payment Code was not found",
 			CustomerMessage: "This is not a valid Payment Code.",
 		},
-		"FPRA22": &responseCode{
+		"FPRA22": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "The Payment Code has already been used",
 			CustomerMessage: "The Payment Code has already been used",
 		},
-		"FPRA23": &responseCode{
+		"FPRA23": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "The Payment Code has expired",
 			CustomerMessage: "The Payment Code has expired",
 		},
-		"FPRA24": &responseCode{
+		"FPRA24": &ResponseCode{
 			TxnStatus:  StatusDeclined,
 			LogMessage: "The Payment Code has been cancelled",
 			CustomerMessage: `Payment Code has been cancelled. 
 			Please try again with a new Payment Code`,
 		},
-		"FPRA99": &responseCode{
+		"FPRA99": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "DECLINED by Oxipay Gateway",
 			CustomerMessage: "DECLINED",
 		},
-		"EVAL02": &responseCode{
+		"EVAL02": &ResponseCode{
 			TxnStatus:  StatusFailed,
 			LogMessage: "Request is invalid",
 			CustomerMessage: `The request to Oxipay was invalid. 
 			You can try again with a different Payment Code. 
 			Please contact pit@oxipay.com.au for further support`,
 		},
-		"ESIG01": &responseCode{
+		"ESIG01": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
 			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
 		},
-		"EISE01": &responseCode{
+		"EISE01": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Server Error",
 			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
 		},
 	}
 
-	return func(key string) *responseCode {
+	return func(key string) *ResponseCode {
 		// check to make sure we know what the response is
 		ret := innerMap[key]
 
@@ -436,86 +437,86 @@ func ProcessAuthorisationResponses() func(string) *responseCode {
 }
 
 // ProcessSalesAdjustmentResponse provides a guarded response type based on the response code from the Oxipay request
-func ProcessSalesAdjustmentResponse() func(string) *responseCode {
+func ProcessSalesAdjustmentResponse() func(string) *ResponseCode {
 
-	innerMap := map[string]*responseCode{
-		"SPSA01": &responseCode{
+	innerMap := map[string]*ResponseCode{
+		"SPSA01": &ResponseCode{
 			TxnStatus:       StatusApproved,
 			LogMessage:      "APPROVED",
 			CustomerMessage: "APPROVED",
 		},
-		"FPSA01": &responseCode{
+		"FPSA01": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Unable to find the specified POS transaction reference",
 			CustomerMessage: "Unable to find the specified POS transaction reference",
 		},
-		"FPSA02": &responseCode{
+		"FPSA02": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "This contract has already been completed",
 			CustomerMessage: "This contract has already been completed",
 		},
-		"FPSA03": &responseCode{
+		"FPSA03": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "This Oxipay contract has previously been cancelled and all payments collected have been refunded to the customer",
 			CustomerMessage: "This Oxipay contract has previously been cancelled and all payments collected have been refunded to the customer",
 		},
-		"FPSA04": &responseCode{
+		"FPSA04": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed for this amount",
 			CustomerMessage: "Sales adjustment cannot be processed for this amount",
 		},
-		"FPSA05": &responseCode{
+		"FPSA05": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Unable to process a sales adjustment for this contract. Please contact Merchant Services during business hours for further information",
 			CustomerMessage: "Unable to process a sales adjustment for this contract. Please contact Merchant Services during business hours for further information",
 		},
-		"FPSA06": &responseCode{
+		"FPSA06": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed. Please call Oxipay Collections",
 			CustomerMessage: "Sales adjustment cannot be processed. Please call Oxipay Collections",
 		},
-		"FPSA07": &responseCode{
+		"FPSA07": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed at this store",
 			CustomerMessage: "Sales adjustment cannot be processed at this store",
 		},
-		"FPSA08": &responseCode{
+		"FPSA08": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed for this transaction. Duplicate receipt number found.",
 			CustomerMessage: "Sales adjustment cannot be processed for this transaction. Duplicate receipt number found.",
 		},
-		"FPSA09": &responseCode{
+		"FPSA09": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Amount must be greater than 0.",
 			CustomerMessage: "Amount must be greater than 0.",
 		},
-		"EAUT01": &responseCode{
+		"EAUT01": &ResponseCode{
 			TxnStatus:  StatusFailed,
 			LogMessage: "Authentication to gateway error",
 			CustomerMessage: `The request to Oxipay was not what we were expecting. 
 			You can try again with a different Payment Code. 
 			Please contact pit@oxipay.com.au for further support`,
 		},
-		"EVAL01": &responseCode{
+		"EVAL01": &ResponseCode{
 			TxnStatus:  StatusFailed,
 			LogMessage: "Request is invalid",
 			CustomerMessage: `The request to Oxipay was what we were expecting. 
 			You can try again with a different Payment Code. 
 			Please contact pit@oxipay.com.au for further support`,
 		},
-		"ESIG01": &responseCode{
+		"ESIG01": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
 			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
 		},
-		"EISE01": &responseCode{
+		"EISE01": &ResponseCode{
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Server Error",
 			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
 		},
 	}
 
-	return func(key string) *responseCode {
+	return func(key string) *ResponseCode {
 		// check to make sure we know what the response is
 		ret := innerMap[key]
 

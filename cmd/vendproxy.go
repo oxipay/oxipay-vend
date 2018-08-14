@@ -94,13 +94,9 @@ func main() {
 	http.HandleFunc("/refund", RefundHandler)
 
 	// The default port is 500, but one can be specified as an env var if needed.
-	port := appConfig.Webserver.Port
+	port := strconv.FormatInt(int64(appConfig.Webserver.Port), 10)
 
-	if os.Getenv("PORT") != "" {
-		port = os.Getenv("PORT")
-	}
-
-	log.Printf("Starting webserver on port %d \n", port)
+	log.Printf("Starting webserver on port %s \n", port)
 
 	//defer sessionStore.Close()
 
@@ -306,7 +302,7 @@ func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.Pay
 	return browserResponse
 }
 
-func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, responseType oxpay.ResponseType, terminal *terminal.Terminal, amount string) *Response {
+func processOxipayResponse(oxipayResponse *oxipay.OxipayResponse, responseType oxipay.ResponseType, terminal *terminal.Terminal, amount string) *Response {
 
 	// Specify an external transaction ID. This value can be sent back to Vend with
 	// the "ACCEPT" step as the JSON key "transaction_id".
@@ -316,12 +312,12 @@ func processPaymentResponse(oxipayResponse *oxipay.OxipayResponse, responseType 
 	// register that originally sent the payment.
 	response := &Response{}
 
-	var oxipayResponseCode oxipayResponse.Code
+	var oxipayResponseCode *oxipay.ResponseCode
 	switch responseType {
 	case oxipay.Authorisation:
-		oxipayResponseCode = oxipay.ProcessAuthorisationResponses()
+		oxipayResponseCode = oxipay.ProcessAuthorisationResponses()(oxipayResponse.Code)
 	case oxipay.Adjustment:
-		oxipayResponseCode := oxipay.ProcessSalesAdjustmentResponse()
+		oxipayResponseCode = oxipay.ProcessSalesAdjustmentResponse()(oxipayResponse.Code)
 	case oxipay.Registration:
 		// @todo
 
@@ -499,18 +495,24 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 
 // RefundHandler handles performing a refund
 func RefundHandler(w http.ResponseWriter, r *http.Request) {
-	var vReq *vend.RefundRequest
+
 	var browserResponse *Response
 	var err error
 
 	logRequest(r)
 
 	// vReq, err = bindToRefundPayload(r)
-	vReq, err = getPaymentRequestFromSession(r).(vend.RefundRequest)
+	x, err := getPaymentRequestFromSession(r)
 
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
+	}
+	vReq := vend.RefundRequest{
+		Amount:      x.Amount,
+		Origin:      x.Origin,
+		RegisterID:  x.RegisterID,
+		AmountFloat: x.AmountFloat,
 	}
 
 	vReq.PurchaseNumber = r.Form.Get("PurchaseNumber")
@@ -539,7 +541,7 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Oxipay signature: %s \n", oxipayPayload.Signature)
 
 	// send authorisation to the Oxipay POS API
-	oxipayResponse, err := oxipay.ProcessAuthorisation(oxipayPayload)
+	oxipayResponse, err := oxipay.ProcessSalesAdjustment(oxipayPayload)
 
 	if err != nil {
 		http.Error(w, "There was a problem processing the request", http.StatusInternalServerError)
@@ -563,7 +565,7 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 		browserResponse.HTTPStatus = http.StatusBadRequest
 	} else {
 		// Return a response to the browser bases on the response from Oxipay
-		browserResponse = processPaymentResponse(oxipayResponse, terminal, oxipayPayload.PurchaseAmount)
+		browserResponse = processOxipayResponse(oxipayResponse, oxipay.Adjustment, terminal, oxipayPayload.Amount)
 	}
 
 	sendResponse(w, r, browserResponse)
@@ -639,7 +641,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		browserResponse.HTTPStatus = http.StatusBadRequest
 	} else {
 		// Return a response to the browser bases on the response from Oxipay
-		browserResponse = processPaymentResponse(oxipayResponse, terminal, oxipayPayload.PurchaseAmount)
+		browserResponse = processOxipayResponse(oxipayResponse, oxipay.Authorisation, terminal, oxipayPayload.PurchaseAmount)
 	}
 
 	sendResponse(w, r, browserResponse)

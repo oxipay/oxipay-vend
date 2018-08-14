@@ -2255,6 +2255,10 @@ label#paymentcodelabel {
 
 input#paymentcode {
     display: block;
+    margin-right: auto;
+    margin-left: auto;
+    width: 60%;
+    
     font-size: 24pt;
     letter-spacing: 20px;
     padding: 0px;
