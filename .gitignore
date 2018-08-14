@@ -22,3 +22,9 @@ node_modules
 # Glide Vendor
 vendor/
 vendor/*
+
+# environment files
+*.env
+
+vendproxy
+debug
