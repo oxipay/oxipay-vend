@@ -11,7 +11,12 @@ function sendObjectToVend(object) {
   // Define parent/opener window.
   var receiver = window.opener !== null ? window.opener : window.parent
   // Send JSON object to parent/opener window.
-  receiver.postMessage(JSON.stringify(object), '*')
+
+  // this needs to match the site
+  // receiver.postMessage(JSON.stringify(object), 'https://amtest.vendhq.com')
+  console.log("site " + window.location.search)
+  var params = getURLParameters()
+  receiver.postMessage(JSON.stringify(object), params.origin)
 }
 
 // Payments API Steps.
@@ -50,7 +55,7 @@ function declineStep(receiptHTML) {
   console.log('sending DECLINE step')
   sendObjectToVend({
     step: 'DECLINE',
-    print: true,
+    print: false,
     receipt_html_extra: receiptHTML
   })
 }
@@ -185,135 +190,239 @@ function checkResponse(response) {
   }
 }
 
+
+
+var refundDataResponseListener = function (event) {
+    debugger
+
+    var result = getURLParameters()
+
+    if (event.origin !== result.origin ) {
+        return false;
+    }
+    
+    console.log('received event from Vend')
+    console.log('event origin ' + event.origin)
+
+    var data = JSON.parse(event.data)
+    // get sales id. save into a gloabal const
+  
+
+    console.log("In my event listener " + data)
+
+    $.ajax({
+        url: '/refund',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            amount: result.amount,
+            origin: result.origin,
+            sale_id: data.register_sale.client_sale_id,
+            register_id: result.register_id,
+            purchaseno: purchaseno
+        }
+    })
+    .done(function (response) {
+        debugger;
+        console.log(response)
+
+        // Hide outcome buttons while we handle the response.
+        $('#outcomes').hide()
+
+        // Check the response body and act according to the payment status.
+        checkResponse(response)
+    })
+    .fail(function (error) {
+        debugger;
+        console.log(error)
+
+        // Make sure status text is cleared.
+        $('#outcomes').hide()
+        $('#statusMessage').empty()
+        $.get('../assets/templates/failed.html', function (data) {
+        $('#statusMessage').append(data)
+        })
+        // Quit window, giving cashier chance to try again.
+        setTimeout(declineStep, 4000)
+    })
+}
+
+
+var paymentDataResponseListener = function (event) {
+    debugger
+    var result = getURLParameters()
+    
+    if (event.origin !== result.origin ) {
+        return false;
+    }
+    
+    console.log('received event from Vend')
+    console.log('event origin ' + event.origin)
+
+    var data = JSON.parse(event.data)
+
+    // get sales id. save into a gloabal const
+    console.log("In my event listener " + data)
+
+    var paymentCode = $("#paymentcode").val()
+
+    // Hide outcome buttons.
+    $('#outcomes').hide()
+  
+    // Show tap insert or swipe card prompt.
+    $('#statusMessage').empty()
+    $.get('../assets/templates/payment.html', function (data) {
+      $('#statusMessage').append(data)
+    })
+  
+
+    // If we did not at least two query params from Vend something is wrong.
+    if (Object.keys(result).length < 2) {
+      console.log('did not get at least two query results')
+      $('#statusMessage').empty()
+      $.get('../assets/templates/failed.html', function (data) {
+        $('#statusMessage').append(data)
+      })
+      setTimeout(exitStep(), 4000)
+    }
+    debugger
+    $.ajax({
+        url: '/pay',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+          amount: result.amount,
+          origin: result.origin,
+          register_id: result.register_id,
+          sale_id: data.register_sale.client_sale_id,
+          paymentcode: paymentCode
+        }
+      })
+      .done(function (response) {
+        console.log(response)
+  
+        // Hide outcome buttons while we handle the response.
+        $('#outcomes').hide()
+  
+        // Check the response body and act according to the payment status.
+        checkResponse(response)
+      })
+      .fail(function (error) {
+        console.log(error)
+  
+        // Make sure status text is cleared.
+        $('#outcomes').hide()
+        $('#statusMessage').empty()
+        $.get('../assets/templates/failed.html', function (data) {
+            $('#statusMessage').append(data)
+        })
+        // Quit window, giving cashier chance to try again.
+        setTimeout(declineStep, 4000)
+      })
+
+}
+
 // sendRefund sends refund to the gateway
 function sendRefund() {
-
-  // grab the purchase no from form
-  var paymentCode = $("#paymentcode").val()
-
-  // Hide outcome buttons.
-  $('#outcomes').hide()
+    debugger
+    // grab the purchase no from form
+    var paymentCode = $("#paymentcode").val()
   
-
-  // Show tap insert or swipe card prompt.
-  $('#statusMessage').empty()
-  $.get('../assets/templates/payment.html', function (data) {
-    $('#statusMessage').append(data)
-  })
-  // Get the payment context from the URL query string.
-  var result = {}
-  result = getURLParameters()
-
-  // If we did not at least two query params from Vend something is wrong.
-  if (Object.keys(result).length < 2) {
-    console.log('did not get at least two query results')
+    // Hide outcome buttons.
+    $('#outcomes').hide()
+    
+  
+    // Show tap insert or swipe card prompt.
     $('#statusMessage').empty()
-    $.get('../assets/templates/failed.html', function (data) {
+    $.get('../assets/templates/payment.html', function (data) {
       $('#statusMessage').append(data)
     })
-    setTimeout(exitStep(), 4000)
-  }
+    // Get the payment context from the URL query string.
+    var result = {}
+    result = getURLParameters()
   
-  $.ajax({
-      url: '/refund',
-      type: 'POST',
-      dataType: 'json',
-      data: {
-        amount: result.amount,
-        origin: result.origin,
-        register_id: result.register_id,
-        purchaseno: purchaseno
-      }
-    })
-    .done(function (response) {
-      console.log(response)
-
-      // Hide outcome buttons while we handle the response.
-      $('#outcomes').hide()
-
-      // Check the response body and act according to the payment status.
-      checkResponse(response)
-    })
-    .fail(function (error) {
-      console.log(error)
-
-      // Make sure status text is cleared.
-      $('#outcomes').hide()
+    // If we did not at least two query params from Vend something is wrong.
+    if (Object.keys(result).length < 2) {
+      console.log('did not get at least two query results')
       $('#statusMessage').empty()
       $.get('../assets/templates/failed.html', function (data) {
         $('#statusMessage').append(data)
       })
-      // Quit window, giving cashier chance to try again.
-      setTimeout(declineStep, 4000)
-    })
-
+      setTimeout(exitStep(), 4000)
+    }
+  
+    // We are going to send a data steup so we dynammically bind a listener so that we aren't 
+    // subscribing to all events
+    window.addEventListener(
+      'message',
+      refundDataResponseListener,
+      false
+    )
+  
+    // send the datastep
+    dataStep()
+    
 }
 
-// sendPayment sends payment context to the gateway to begin processing the
-// payment.
-function sendPayment(outcome) {
+function sendPayment() {
+    debugger
+    // grab the purchase no from form
+    var paymentCode = $("#paymentcode").val()
   
-  // grab payment code from form
-  var paymentCode = $("#paymentcode").val()
-
-  // Hide outcome buttons.
-  $('#outcomes').hide()
+    // Hide outcome buttons.
+    $('#outcomes').hide()
+    
   
-
-  // Show tap insert or swipe card prompt.
-  $('#statusMessage').empty()
-  $.get('../assets/templates/payment.html', function (data) {
-    $('#statusMessage').append(data)
-  })
-
-  // Get the payment context from the URL query string.
-  var result = {}
-  result = getURLParameters()
-
-  // If we did not at least two query params from Vend something is wrong.
-  if (Object.keys(result).length < 2) {
-    console.log('did not get at least two query results')
+    // Show tap insert or swipe card prompt.
     $('#statusMessage').empty()
-    $.get('../assets/templates/failed.html', function (data) {
+    $.get('../assets/templates/payment.html', function (data) {
       $('#statusMessage').append(data)
     })
-    setTimeout(exitStep(), 4000)
-  }
+    // Get the payment context from the URL query string.
+    var result = {}
+    result = getURLParameters()
   
-  $.ajax({
-      url: '/pay',
-      type: 'POST',
-      dataType: 'json',
-      data: {
-        amount: result.amount,
-        outcome: outcome,
-        origin: result.origin,
-        register_id: result.register_id,
-        paymentcode: paymentCode
-      }
-    })
-    .done(function (response) {
-      console.log(response)
-
-      // Hide outcome buttons while we handle the response.
-      $('#outcomes').hide()
-
-      // Check the response body and act according to the payment status.
-      checkResponse(response)
-    })
-    .fail(function (error) {
-      console.log(error)
-
-      // Make sure status text is cleared.
-      $('#outcomes').hide()
+    // If we did not at least two query params from Vend something is wrong.
+    if (Object.keys(result).length < 2) {
+      console.log('did not get at least two query results')
       $('#statusMessage').empty()
       $.get('../assets/templates/failed.html', function (data) {
         $('#statusMessage').append(data)
       })
-      // Quit window, giving cashier chance to try again.
-      setTimeout(declineStep, 4000)
-    })
+      setTimeout(exitStep(), 4000)
+    }
+  
+    // We are going to send a data steup so we dynammically bind a listener so that we aren't 
+    // subscribing to all events
+    window.addEventListener(
+      'message',
+      paymentDataResponseListener,
+      false
+    )
+  
+    // send the datastep
+    dataStep()
+    
 }
+
+
+
+function cancelRefund(outcome) {
+    console.log('cancelling refund')
+  
+    // Hide outcome buttons.
+    $('#outcomes').hide()
+  
+    // Show the cancelling with a loader.
+    $('#statusMessage').empty()
+    $.get('../assets/templates/cancelling.html', function (data) {
+      $('#statusMessage').append(data)
+    })
+  
+    // Wait four seconds, then quit window, giving the cashier a chance to try
+    // again.
+    setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
+  }
 
 // cancelPayment simulates cancelling a payment.
 function cancelPayment(outcome) {
@@ -333,19 +442,6 @@ function cancelPayment(outcome) {
   setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
 }
 
-// Listen for postMessage events from Vend, if requesting extra sale data then
-// this is where you can handle the sale JSON.
-window.addEventListener(
-  'message',
-  function (event) {
-    console.log('received event from Vend')
-
-    var data
-    data = JSON.parse(event.data)
-    console.log(data)
-  },
-  false
-)
 
 function showClose() {
   sendObjectToVend({
@@ -377,6 +473,8 @@ $(function () {
   
   // Send the SETUP step with our configuration values..  
   setupStep()
+
+  dataStep()
 
   //$('#statusMessage').empty()
   $.get('../assets/templates/waiting.html', function (data) {

@@ -2,6 +2,7 @@ package vend
 
 // PaymentRequest is the originating request from vend
 type PaymentRequest struct {
+	SaleID      string
 	Amount      string
 	Origin      string
 	RegisterID  string
@@ -11,6 +12,7 @@ type PaymentRequest struct {
 
 // RefundRequest is the originating request from vend
 type RefundRequest struct {
+	SaleID         string
 	Amount         string
 	Origin         string
 	RegisterID     string

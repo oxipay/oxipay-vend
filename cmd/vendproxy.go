@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	colour "github.com/bclicn/color"
@@ -100,7 +99,6 @@ func main() {
 	log.Printf("Starting webserver on port %s \n", port)
 
 	//defer sessionStore.Close()
-
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 
 	// @todo handle shutdowns
@@ -234,7 +232,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 			// ensure the response came from Oxipay
 			if !response.Authenticate(registrationPayload.DeviceToken) {
-				browserResponse.Message = "The signature does not match the expected signature"
+				browserResponse.Message = "The signature returned from Oxipay does not match the expected signature"
 				browserResponse.HTTPStatus = http.StatusBadRequest
 			} else {
 				// process the response
@@ -303,7 +301,7 @@ func processRegistrationResponse(response *oxipay.OxipayResponse, vReq *vend.Pay
 	return browserResponse
 }
 
-func processOxipayResponse(oxipayResponse *oxipay.OxipayResponse, responseType oxipay.ResponseType, terminal *terminal.Terminal, amount string) *Response {
+func processOxipayResponse(oxipayResponse *oxipay.OxipayResponse, responseType oxipay.ResponseType, amount string) *Response {
 
 	// Specify an external transaction ID. This value can be sent back to Vend with
 	// the "ACCEPT" step as the JSON key "transaction_id".
@@ -484,6 +482,7 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 	vReq := &vend.PaymentRequest{
 		Amount:     r.Form.Get("amount"),
 		Origin:     origin,
+		SaleID:     r.Form.Get("sale_id"),
 		RegisterID: r.Form.Get("register_id"),
 		Code:       r.Form.Get("paymentcode"),
 	}
@@ -496,12 +495,10 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 
 // RefundHandler handles performing a refund
 func RefundHandler(w http.ResponseWriter, r *http.Request) {
-
-	var browserResponse *Response
-	var err error
-
-	//logRequest(r)
 	r.ParseForm()
+
+	browserResponse := new(Response)
+	var err error
 
 	// vReq, err = bindToRefundPayload(r)
 	x, err := getPaymentRequestFromSession(r)
@@ -509,14 +506,14 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
-		return
 	}
 	vReq := vend.RefundRequest{
 		Amount:         x.Amount,
 		Origin:         x.Origin,
+		SaleID:         r.Form.Get("sale_id"),
+		PurchaseNumber: r.Form.Get("PurchaseNumber"),
 		RegisterID:     x.RegisterID,
 		AmountFloat:    x.AmountFloat,
-		PurchaseNumber: r.Form.Get("purchaseno"),
 	}
 
 	terminal, err := terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
@@ -529,12 +526,9 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	txnRef, err := shortid.Generate()
 	var oxipayPayload = &oxipay.OxipaySalesAdjustmentPayload{
 		DeviceID:          terminal.FxlRegisterID,
-		PurchaseRef:       vReq.PurchaseNumber,
 		FirmwareVersion:   "vend_integration_v0.0.1",
 		OperatorID:        "Vend",
-		MerchantID:        terminal.FxlSellerID,
 		PosTransactionRef: txnRef,
-		Amount:            strings.Replace(vReq.Amount, "-", "", -1),
 	}
 
 	// generate the plaintext for the signature
@@ -552,26 +546,17 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "There was a problem processing the request", http.StatusInternalServerError)
 		// log the raw response
 		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
-		log.Printf(colour.Red(msg))
-		return
-	}
-
-	if err != nil {
-		http.Error(w, "There was a problem processing the request", http.StatusInternalServerError)
-		// log the raw response
-		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
-		log.Printf(colour.Red(msg))
+		log.Printf(msg)
 		return
 	}
 
 	// ensure the response has come from Oxipay
-	// there is a bug in Oxipay that error don't include signatures
 	if !oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey) {
 		browserResponse.Message = "The signature does not match the expected signature"
 		browserResponse.HTTPStatus = http.StatusBadRequest
 	} else {
 		// Return a response to the browser bases on the response from Oxipay
-		browserResponse = processOxipayResponse(oxipayResponse, oxipay.Adjustment, terminal, oxipayPayload.Amount)
+		browserResponse = processOxipayResponse(oxipayResponse, oxipay.Adjustment, oxipayPayload.Amount)
 	}
 
 	sendResponse(w, r, browserResponse)
@@ -582,10 +567,10 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 // payment gateway.
 func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	var vReq *vend.PaymentRequest
-	var browserResponse *Response
 	var err error
+	browserResponse := new(Response)
 
-	logRequest(r)
+	//logRequest(r)
 
 	vReq, err = bindToPaymentPayload(r)
 	if err != nil {
@@ -607,14 +592,14 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Processing Payment using Oxipay register %s ", terminal.FxlRegisterID)
 
-	txnRef, err := shortid.Generate()
+	// txnRef, err := shortid.Generate()
 
 	// send off to Oxipay
 	//var oxipayPayload
 	var oxipayPayload = &oxipay.OxipayPayload{
 		DeviceID:          terminal.FxlRegisterID,
 		MerchantID:        terminal.FxlSellerID,
-		PosTransactionRef: txnRef,
+		PosTransactionRef: vReq.SaleID,
 		FinanceAmount:     vReq.Amount,
 		FirmwareVersion:   "vend_integration_v0.0.1",
 		OperatorID:        "Vend",
@@ -647,7 +632,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		browserResponse.HTTPStatus = http.StatusBadRequest
 	} else {
 		// Return a response to the browser bases on the response from Oxipay
-		browserResponse = processOxipayResponse(oxipayResponse, oxipay.Authorisation, terminal, oxipayPayload.PurchaseAmount)
+		browserResponse = processOxipayResponse(oxipayResponse, oxipay.Authorisation, oxipayPayload.PurchaseAmount)
 	}
 
 	sendResponse(w, r, browserResponse)
@@ -661,7 +646,11 @@ func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 	if len(response.file) > 0 {
 		// serve up the success page
 		// @todo check file exists
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		http.ServeFile(w, r, response.file)
+
 		return
 	}
 

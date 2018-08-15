@@ -16,54 +16,32 @@ import (
 	"github.com/vend/peg/internal/pkg/config"
 	"github.com/vend/peg/internal/pkg/oxipay"
 	"github.com/vend/peg/internal/pkg/terminal"
+	"github.com/vend/peg/internal/pkg/vend"
 	shortid "github.com/ventu-io/go-shortid"
 )
 
 var Db *sql.DB
 
+var appConfig config.HostConfig
+
 func TestMain(m *testing.M) {
-	myConfig, _ := config.ReadApplicationConfig("../configs/vendproxy.json")
+	appConfig, _ := config.ReadApplicationConfig("../configs/vendproxy.json")
 	// we need a"" database connection for most of the tests
 
-	Db = connectToDatabase(myConfig.Database)
+	Db = connectToDatabase(appConfig.Database)
+
 	defer Db.Close()
+
+	// add vars to the seesion to simulate a redirect
+	DbSessionStore = initSessionStore(Db, appConfig.Session)
 
 	terminal.Db = Db
 
-	oxipay.GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/Test"
-	oxipay.CreateKeyURL = oxipay.GatewayURL + "/CreateKey"
-	oxipay.ProcessAuthorisationURL = oxipay.GatewayURL + "/ProcessAuthorisation"
+	// oxipay.GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/Test"
+
 	returnCode := m.Run()
 
 	os.Exit(returnCode)
-}
-
-func TestProcessAuthorisation(t *testing.T) {
-
-	terminal.Db = Db
-
-	terminal, err := terminal.GetRegisteredTerminal("https://amtest.vendhq.com", "0afa8de1-1442-11e8-edec-94863fd13a3c")
-	if err != nil {
-		t.Error(err)
-	}
-
-	reponse := `{"x_purchase_number":"52011913","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"3b715be8fdd67decd299cbb14ceeec3c76667d48e3468e4d3f343602d9b7d690","tracking_data":null}`
-
-	oxipayResponse := new(oxipay.OxipayResponse)
-	err = json.Unmarshal([]byte(reponse), oxipayResponse)
-	if err != nil {
-		t.Error(err)
-	}
-	isValid := oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey)
-
-	if isValid == false {
-		t.Error("Not a valid request")
-	}
-	browserResponse := processPaymentResponse(oxipayResponse, terminal, "4000")
-
-	if browserResponse.Status != statusAccepted {
-		t.Error("Expecting for the transaction to be accepted")
-	}
 }
 
 // TestTerminalSave tests saving a new terminal in the database for the registration phase
@@ -107,7 +85,7 @@ func TestTerminalUniqueSave(t *testing.T) {
 }
 
 // TestRegisterHandler  generating oxipay payload
-/*
+
 func TestRegisterHandler(t *testing.T) {
 
 	// Create a request to pass to our handler. We don't have any query parameters for now, so we'll
@@ -123,20 +101,14 @@ func TestRegisterHandler(t *testing.T) {
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	// add vars to the seesion to simulate a redirect
-	initSessionStore(Db)
-
-	session, err := SessionStore.Get(req, "oxipay")
-	if err != nil {
-		t.Errorf("Unable to get session store: %s ", err.Error())
-		return
-	}
 	guid, _ := uuid.NewV4()
 	vReq := &vend.PaymentRequest{
 		RegisterID: guid.String(),
-		Origin:     "http://pos.oxipay.com.au",
+		Origin:     "http://testpos.oxipay.com.au",
 	}
 	rr := httptest.NewRecorder()
+
+	session, err := getSession(req, "oxipay")
 
 	session.Values["vReq"] = vReq
 	err = session.Save(req, rr)
@@ -158,7 +130,6 @@ func TestRegisterHandler(t *testing.T) {
 			status, http.StatusOK)
 	}
 }
-*/
 
 // TestGeneratePayload generating oxipay payload assumes a registered device
 // with both Oxipay and the local database
@@ -258,6 +229,121 @@ func TestProcessAuthorisationRedirect(t *testing.T) {
 	if location := rr.HeaderMap.Get("Location"); location != "/register" {
 		t.Errorf("Function redirects but redirects to %s rather than /register", location)
 	}
+}
+
+func TestProcessSalesAdjustmentHandler(t *testing.T) {
+
+	var uniqueID, _ = uuid.NewV4()
+	log.Printf("Generated Refund TxID of : %s \n", uniqueID)
+
+	vendRegisterID := "0afa8de1-1442-11e8-edec-94863fd13a3c"
+	origin := "https://amtest.vendhq.com"
+
+	// establish the session and save the amount and the register in the session
+	vReq := &vend.PaymentRequest{
+		Amount:     "4401",
+		Origin:     origin,
+		RegisterID: vendRegisterID,
+	}
+
+	// posTerminal, err := terminal.GetRegisteredTerminal("http://pos.example.com", vendRegisterID)
+
+	// Create a request to pass to our handler. We don't have any query parameters for now, so we'll
+	// pass 'nil' as the third parameter.
+	form := url.Values{}
+	form.Add("purchasenumber", "01APPROV") // needs a real payment code to succeed against sandbox / prod
+
+	req, err := http.NewRequest(http.MethodPost, "/refund", strings.NewReader(form.Encode()))
+	session, err := getSession(req, "oxipay")
+
+	if err != nil {
+		t.Error("Can't get the session")
+	}
+
+	session.Values["vReq"] = vReq
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(RefundHandler)
+
+	// directly and pass in our Request and ResponseRecorder.
+	handler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %d want %d",
+			status, http.StatusOK)
+		return
+	}
+
+	// Check the response body is what we expect.
+	response := new(Response)
+	body, _ := ioutil.ReadAll(rr.Body)
+	err = json.Unmarshal(body, response)
+
+	if response.Status != "ACCEPTED" {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			rr.Body.String(), "ACCEPTED")
+	}
+}
+
+func TestProcessAuthorisationResponse(t *testing.T) {
+
+	terminal, err := terminal.GetRegisteredTerminal("https://amtest.vendhq.com", "0afa8de1-1442-11e8-edec-94863fd13a3c")
+	if err != nil {
+		t.Error(err)
+	}
+
+	reponse := `{"x_purchase_number":"52011913","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"3b715be8fdd67decd299cbb14ceeec3c76667d48e3468e4d3f343602d9b7d690","tracking_data":null}`
+
+	oxipayResponse := new(oxipay.OxipayResponse)
+	err = json.Unmarshal([]byte(reponse), oxipayResponse)
+	if err != nil {
+		t.Error(err)
+	}
+	isValid := oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey)
+
+	if isValid == false {
+		t.Error("Not a valid request")
+	}
+	browserResponse := processOxipayResponse(oxipayResponse, oxipay.Authorisation, "4000")
+
+	if browserResponse.Status != statusAccepted {
+		t.Error("Expecting for the transaction to be accepted")
+	}
+}
+
+func TestRegistrationResponse(t *testing.T) {
+	rawResponse := `{
+		"x_key": "1234567890",
+		"x_status": "Success",
+		"x_code": "SCRK01",
+		"x_message": "Success",
+		"signature": "ff05ed059e8008a3e8e1210faee30ce0064e492f34709151804a32725d8441db",
+		"tracking_data": null
+	 }`
+
+	oxipayResponse := new(oxipay.OxipayResponse)
+	err := json.Unmarshal([]byte(rawResponse), oxipayResponse)
+	if err != nil {
+		t.Error(err)
+	}
+	isValid := oxipayResponse.Authenticate("Voh4ig3eepeedai8")
+
+	if isValid == false {
+		t.Error("Not a valid request")
+	}
+	browserResponse := processOxipayResponse(oxipayResponse, oxipay.Registration, "4000")
+
+	if browserResponse.Status != statusAccepted {
+		t.Error("Expecting for the transaction to be accepted")
+	}
+
 }
 
 func TestGeneratePayload(t *testing.T) {
