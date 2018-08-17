@@ -16,7 +16,7 @@ function sendObjectToVend(object) {
   // receiver.postMessage(JSON.stringify(object), 'https://amtest.vendhq.com')
   console.log("site " + window.location.search)
   var params = getURLParameters()
-  receiver.postMessage(JSON.stringify(object), params.origin)
+  receiver.postMessage(JSON.stringify(object), "*")
 }
 
 // Payments API Steps.
@@ -132,8 +132,7 @@ function getURLParameters() {
 // Check response status from the gateway, we then manipulate the payment flow
 // in Vend in response to this using the Payment API steps.
 function checkResponse(response) {
-  
-
+  debugger;
   switch (response.status) {
     case 'ACCEPTED':
       $('#statusMessage').empty()
@@ -190,11 +189,8 @@ function checkResponse(response) {
   }
 }
 
-
-
 var refundDataResponseListener = function (event) {
-    debugger
-
+    
     var result = getURLParameters()
 
     if (event.origin !== result.origin ) {
@@ -206,24 +202,25 @@ var refundDataResponseListener = function (event) {
 
     var data = JSON.parse(event.data)
     // get sales id. save into a gloabal const
-  
+    debugger
 
-    console.log("In my event listener " + data)
+    console.log(data)
 
+    var data = {
+        amount: result.amount,
+        origin: result.origin,
+        sale_id: data.register_sale.client_sale_id,
+        register_id: result.register_id,
+        purchaseno: $("#purchaseno").val()
+    };
+    
     $.ajax({
         url: '/refund',
         type: 'POST',
         dataType: 'json',
-        data: {
-            amount: result.amount,
-            origin: result.origin,
-            sale_id: data.register_sale.client_sale_id,
-            register_id: result.register_id,
-            purchaseno: purchaseno
-        }
+        data: data
     })
     .done(function (response) {
-        debugger;
         console.log(response)
 
         // Hide outcome buttons while we handle the response.
@@ -233,14 +230,13 @@ var refundDataResponseListener = function (event) {
         checkResponse(response)
     })
     .fail(function (error) {
-        debugger;
         console.log(error)
 
         // Make sure status text is cleared.
         $('#outcomes').hide()
         $('#statusMessage').empty()
         $.get('../assets/templates/failed.html', function (data) {
-        $('#statusMessage').append(data)
+          $('#statusMessage').append(data)
         })
         // Quit window, giving cashier chance to try again.
         setTimeout(declineStep, 4000)
@@ -269,13 +265,6 @@ var paymentDataResponseListener = function (event) {
     // Hide outcome buttons.
     $('#outcomes').hide()
   
-    // Show tap insert or swipe card prompt.
-    $('#statusMessage').empty()
-    $.get('../assets/templates/payment.html', function (data) {
-      $('#statusMessage').append(data)
-    })
-  
-
     // If we did not at least two query params from Vend something is wrong.
     if (Object.keys(result).length < 2) {
       console.log('did not get at least two query results')
@@ -285,7 +274,7 @@ var paymentDataResponseListener = function (event) {
       })
       setTimeout(exitStep(), 4000)
     }
-    debugger
+    
     $.ajax({
         url: '/pay',
         type: 'POST',
@@ -360,8 +349,23 @@ function sendRefund() {
     )
   
     // send the datastep
-    dataStep()
+    if (inIframe()) {
+      dataStep();
+    } else  {
+      // we are outside the iframe
+      // and won't receive a message. We need to trigger it manually
+      refundDataResponseListener();
+    }
     
+    return false
+}
+
+function inIframe () {
+    try {
+        return window.self !== window.top;
+    } catch (e) {
+        return true;
+    }
 }
 
 function sendPayment() {
@@ -402,7 +406,7 @@ function sendPayment() {
   
     // send the datastep
     dataStep()
-    
+    return false
 }
 
 
@@ -471,10 +475,21 @@ function seeForm() {
 // close button and setting the header.
 $(function () {
   
+
   // Send the SETUP step with our configuration values..  
   setupStep()
 
-  dataStep()
+  
+    // // We are going to send a data steup so we dynammically bind a listener so that we aren't 
+    // // subscribing to all events
+    // window.addEventListener(
+    //   'message',
+    //   paymentDataResponseListener,
+    //   false
+    // )
+  
+    // // send the datastep
+    // dataStep()
 
   //$('#statusMessage').empty()
   $.get('../assets/templates/waiting.html', function (data) {
