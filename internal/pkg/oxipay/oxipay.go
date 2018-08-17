@@ -328,6 +328,53 @@ func CheckMAC(message []byte, messageMAC []byte, key []byte) bool {
 	return isGood
 }
 
+func ProcessRegistrationResponse() func(string) *ResponseCode {
+	innerMap := map[string]*ResponseCode{
+		"SCRK01": &ResponseCode{
+			TxnStatus:       StatusApproved,
+			LogMessage:      "SUCCESS",
+			CustomerMessage: "SUCCESS",
+		},
+		"FCRK01": &ResponseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Device token provided could not be found",
+			CustomerMessage: "Device token provided could not be found",
+		},
+		"FCRK02": &ResponseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Device token provided has already been used",
+			CustomerMessage: "Device token provided has already been used",
+		},
+		"EVAL01": &ResponseCode{
+			TxnStatus:  StatusFailed,
+			LogMessage: "Request is invalid",
+			CustomerMessage: `The request to Oxipay was invalid. 
+			You can try again with a different Payment Code. 
+			Please contact pit@oxipay.com.au for further support`,
+		},
+		"ESIG01": &ResponseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
+			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+		},
+		"EISE01": &ResponseCode{
+			TxnStatus:       StatusFailed,
+			LogMessage:      "Server Error",
+			CustomerMessage: "Please contact pit@oxipay.com.au for further support",
+		},
+	}
+
+	return func(key string) *ResponseCode {
+		// check to make sure we know what the response is
+		ret := innerMap[key]
+
+		if ret == nil {
+			return innerMap["EISE01"]
+		}
+		return ret
+	}
+}
+
 // ProcessAuthorisationResponses provides a guarded response type based on the response code from the Oxipay request
 func ProcessAuthorisationResponses() func(string) *ResponseCode {
 

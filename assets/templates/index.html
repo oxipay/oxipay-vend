@@ -21,14 +21,13 @@
                         <label id="paymentcodelabel" for="paymentcode">Enter Payment Code</label>
                         <input maxlength="6" minlength="6"  name="paymentcode" id="paymentcode" pattern="/(0-9){6}/" />
                     </div>
-                    <div class="form-group">
-                            <div class="center-text">
-                                <button class="vd-button vd-button--primary" onclick="sendPayment('accept');">Process</button>
-                                <button class="vd-button vd-button--secondary" onclick="cancelPayment();">Cancel</button>
-                            </div>
-                    </div>
                 </form>
-                
+                <div class="form-group">
+                    <div class="center-text">
+                        <button class="vd-button vd-button--primary" onclick="sendPayment('accept');">Process</button>
+                        <button class="vd-button vd-button--secondary" onclick="cancelPayment();">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
