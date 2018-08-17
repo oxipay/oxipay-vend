@@ -532,6 +532,8 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Return a response to the browser bases on the response from Oxipay
 		browserResponse = processOxipayResponse(oxipayResponse, oxipay.Adjustment, oxipayPayload.Amount)
+		browserResponse.Amount = "0" // this is set because the payload
+
 	}
 
 	sendResponse(w, r, browserResponse)

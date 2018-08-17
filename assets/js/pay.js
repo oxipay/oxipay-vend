@@ -133,32 +133,49 @@ function getURLParameters() {
 // in Vend in response to this using the Payment API steps.
 function checkResponse(response) {
   debugger;
+  var receiptHTML = ""
   switch (response.status) {
     case 'ACCEPTED':
       $('#statusMessage').empty()
 
-      var receiptHTML = `
+
+      if (response.id == 0) {
+        receiptHTML = `
         <div>
           <h2>APPROVED</h2>
           <span>Oxipay Purchase #: ` + response.id+ ` </span>
         </div>`;
+      }      
       acceptStep(receiptHTML, response.id)
       break
     case 'DECLINED':
       $('#statusMessage').empty()
-      $.get('../assets/templates/declined.html', function (data) {
-        $('#statusMessage').append(data)
-      })
+    //   $.get('../assets/templates/declined.html', function (data) {
+    //     $('#statusMessage').append(data)
+    //   })
 
-      setTimeout(declineStep, 4000, '<div>DECLINED</div>')
+      receiptHTML = `
+        <div>
+            <h2>DECLINED</h2>
+            <span> ` + response.message + `</span>
+        </div>`;
+      declineStep(receiptHTML)
+//      setTimeout(declineStep, 4000, receiptHTML)
       break
     case 'FAILED':
+    
       $('#statusMessage').empty()
+      
       $.get('../assets/templates/failed.html', function (data) {
         $('#statusMessage').append(data)
       })
+      receiptHTML = `
+        <div>
+            <h2>DECLINED</h2>
+            <span> ` + response.message + `</span>
+        </div>`;
 
-      setTimeout($('#outcomes').show(), 6000)
+      setTimeout(declineStep, 4000, receiptHTML)
       break
     case 'TIMEOUT':
       $('#statusMessage').empty()
@@ -166,25 +183,14 @@ function checkResponse(response) {
         $('#statusMessage').append(data)
       })
 
-      setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
-      break
-    case 'UNKNOWN':
-      $('#statusMessage').empty()
-      $.get('../assets/templates/failed.html', function (data) {
-        $('#statusMessage').append(data)
-      })
+      receiptHTML = `
+      <div>
+          <h2>TIMEOUT</h2>
+          <span> ` + response.message + `</span>
+      </div>`;
 
-      setTimeout($('#outcomes').show(), 4000)
-      break
-    default:
-      $('#statusMessage').empty()
-      $.get('../assets/templates/failed.html', function (data) {
-        $('#statusMessage').append(data)
-      })
 
-      // Do not know what we got, or something went wrong, so log it.
-      console.log(response)
-      setTimeout($('#outcomes').show(), 4000)
+      setTimeout(declineStep, 4000, receiptHTML)
       break
   }
 }
@@ -403,9 +409,14 @@ function sendPayment() {
       paymentDataResponseListener,
       false
     )
-  
+
     // send the datastep
-    dataStep()
+    if (inIframe()) {
+        dataStep();
+    } else  {
+        // send the datastep
+        dataStep()
+    }
     return false
 }
 
