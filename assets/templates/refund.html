@@ -14,22 +14,21 @@
 
     <div class="container center">
         <div id="statusMessage">
-            To adjust the 
+            <img src="/assets/images/receipt.png" />
         </div>
             <div id="outcomes">
                 <form action="/refund" method="POST" id="paymentform">
                     <div class="form-group">
-                        <label id="purchasenolabel" for="purchaseno">Enter the Oxipay Purchase / Reciept number</label>
+                        <label id="purchasenolabel" for="purchaseno">Oxipay Purchase #:</label>
                         <input name="purchaseno" id="purchaseno" />
                     </div>
-                    <div class="form-group">
-                        <div class="center-text">
-                            <button class="vd-button vd-button--primary" onclick="sendRefund();">Process</button>
-                            <button class="vd-button vd-button--secondary" onclick="cancelRefund();">Cancel</button>
-                        </div>
-                    </div>
                 </form>
-                
+                <div class="form-group">
+                    <div class="center-text">
+                        <button class="vd-button vd-button--primary" onclick="sendRefund();">Refund</button>
+                        <button class="vd-button vd-button--secondary" onclick="cancelRefund();">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

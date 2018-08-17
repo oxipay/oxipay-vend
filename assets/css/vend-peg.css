@@ -2245,7 +2245,7 @@ html {
     margin-top: 40px;
 }
 
-label#paymentcodelabel {
+label#paymentcodelabel,label#purchasenolabel {
     text-align: center;
     display: block;
     margin-bottom: 20px;
@@ -2253,7 +2253,7 @@ label#paymentcodelabel {
 
 }
 
-input#paymentcode {
+input#paymentcode, input#purchaseno {
     display: block;
     margin-right: auto;
     margin-left: auto;
