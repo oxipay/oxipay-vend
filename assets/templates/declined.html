@@ -1,8 +1,11 @@
 <div class="center-text">
     <h1>
-        This payment has been declined.
+        This payment has been ${response.status}.
     </h1>
     <p>
-        No payment has been taken because this transaction was declined.
+        No payment has been taken
+    </p>
+    <p>
+        ${response.message}
     </p>
 </div>

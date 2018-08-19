@@ -129,10 +129,13 @@ function getURLParameters() {
   return parameters
 }
 
+
+
 // Check response status from the gateway, we then manipulate the payment flow
 // in Vend in response to this using the Payment API steps.
 function checkResponse(response) {
   debugger;
+  var response = response;
   switch (response.status) {
     case 'ACCEPTED':
       $('#statusMessage').empty()
@@ -146,16 +149,22 @@ function checkResponse(response) {
       break
     case 'DECLINED':
       $('#statusMessage').empty()
-      $.get('../assets/templates/declined.html', function (data) {
+      $.get('/assets/templates/declined.html', function (data) {
+        data = data.replace("${response.status}", response.status.toLowerCase());
+        data = data.replace("${response.message}", response.message);
+
         $('#statusMessage').append(data)
       })
 
-      setTimeout(declineStep, 4000, '<div>DECLINED</div>')
+      setTimeout(declineStep, 4000, '<div>Declined</div>')
       break
     case 'FAILED':
+      
       $('#statusMessage').empty()
-      $.get('../assets/templates/failed.html', function (data) {
-        $('#statusMessage').append(data)
+      $.get('/assets/templates/failed.html', function (data) {
+        data = data.replace("${response.status}", response.status.toLowerCase());
+        data = data.replace("${response.message}", response.message);
+        $('#statusMessage').append(ret)
       })
 
       setTimeout($('#outcomes').show(), 6000)
@@ -167,14 +176,6 @@ function checkResponse(response) {
       })
 
       setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
-      break
-    case 'UNKNOWN':
-      $('#statusMessage').empty()
-      $.get('../assets/templates/failed.html', function (data) {
-        $('#statusMessage').append(data)
-      })
-
-      setTimeout($('#outcomes').show(), 4000)
       break
     default:
       $('#statusMessage').empty()
@@ -202,7 +203,6 @@ var refundDataResponseListener = function (event) {
 
     var data = JSON.parse(event.data)
     // get sales id. save into a gloabal const
-    debugger
 
     console.log(data)
 
@@ -245,7 +245,7 @@ var refundDataResponseListener = function (event) {
 
 
 var paymentDataResponseListener = function (event) {
-    debugger
+
     var result = getURLParameters()
     
     if (event.origin !== result.origin ) {
@@ -288,6 +288,7 @@ var paymentDataResponseListener = function (event) {
         }
       })
       .done(function (response) {
+        debugger;
         console.log(response)
   
         // Hide outcome buttons while we handle the response.
@@ -297,6 +298,7 @@ var paymentDataResponseListener = function (event) {
         checkResponse(response)
       })
       .fail(function (error) {
+        debugger;
         console.log(error)
   
         // Make sure status text is cleared.
@@ -369,7 +371,6 @@ function inIframe () {
 }
 
 function sendPayment() {
-    debugger
     // grab the purchase no from form
     var paymentCode = $("#paymentcode").val()
   
@@ -396,20 +397,20 @@ function sendPayment() {
       setTimeout(exitStep(), 4000)
     }
   
-    // We are going to send a data steup so we dynammically bind a listener so that we aren't 
-    // subscribing to all events
-    window.addEventListener(
-      'message',
-      paymentDataResponseListener,
-      false
-    )
-  
+      // We are going to send a data steup so we dynammically bind a listener so that we aren't 
+      // subscribing to all events
+      window.addEventListener('message', paymentDataResponseListener, false)
+      
     // send the datastep
-    dataStep()
+    if (inIframe()) {
+
+      dataStep();
+    } else  {
+      console.log("It does not appear this is contained in an iframe. This is unexpected and will not currently work.")
+    }
+    
     return false
 }
-
-
 
 function cancelRefund(outcome) {
     console.log('cancelling refund')
@@ -474,24 +475,11 @@ function seeForm() {
 // On initial load of modal, configure the page settings such as removing the
 // close button and setting the header.
 $(function () {
-  
 
   // Send the SETUP step with our configuration values..  
   setupStep()
 
-  
-    // // We are going to send a data steup so we dynammically bind a listener so that we aren't 
-    // // subscribing to all events
-    // window.addEventListener(
-    //   'message',
-    //   paymentDataResponseListener,
-    //   false
-    // )
-  
-    // // send the datastep
-    // dataStep()
-
-  //$('#statusMessage').empty()
+  $('#statusMessage').empty()
   $.get('../assets/templates/waiting.html', function (data) {
     $('#statusMessage').append(data)
   })
