@@ -1,5 +1,35 @@
 'use strict'
 
+var Severity = Object.freeze({"EMERGENCY":0, "ALERT":1, "CRITICAL":2, "ERROR": 3, "WARNING": 4, "NOTICE": 5, "INFO": 6,"DEBUG":7})
+
+
+var logLevel = Severity.INFO
+
+// define a new console
+var console=(function(oldCons){
+    return {
+        log: function(text){
+            oldCons.log(text);
+        },
+        info: function (text) {
+
+            oldCons.info(text);
+            // Your code
+        },
+        warn: function (text) {
+            oldCons.warn(text);
+            // Your code
+        },
+        error: function (text) {
+            oldCons.error(text);
+            // Your code
+        }
+    };
+}(window.console));
+
+//Then redefine the old console
+window.console = console;
+
 /* global $, jQuery, window */
 /* eslint-env es6, quotes:single */
 
@@ -27,7 +57,7 @@ function sendObjectToVend(object) {
 // The transaction_id of the external payment should also be specified, as this
 // can be later retrieved via the REST API.
 function acceptStep(receiptHTML, transactionID) {
-  console.log('sending ACCEPT step')
+  console.debug('sending ACCEPT step')
   sendObjectToVend({
     step: 'ACCEPT',
     transaction_id: transactionID,
@@ -129,11 +159,13 @@ function getURLParameters() {
   return parameters
 }
 
+
+
 // Check response status from the gateway, we then manipulate the payment flow
 // in Vend in response to this using the Payment API steps.
 function checkResponse(response) {
   debugger;
-  var receiptHTML = ""
+  var response = response;
   switch (response.status) {
     case 'ACCEPTED':
       $('#statusMessage').empty()
@@ -150,24 +182,22 @@ function checkResponse(response) {
       break
     case 'DECLINED':
       $('#statusMessage').empty()
-    //   $.get('../assets/templates/declined.html', function (data) {
-    //     $('#statusMessage').append(data)
-    //   })
+      $.get('/assets/templates/declined.html', function (data) {
+        data = data.replace("${response.status}", response.status.toLowerCase());
+        data = data.replace("${response.message}", response.message);
 
-      receiptHTML = `
-        <div>
-            <h2>DECLINED</h2>
-            <span> ` + response.message + `</span>
-        </div>`;
-      declineStep(receiptHTML)
-//      setTimeout(declineStep, 4000, receiptHTML)
+        $('#statusMessage').append(data)
+      })
+
+      setTimeout(declineStep, 4000, '<div>Declined</div>')
       break
     case 'FAILED':
-    
-      $('#statusMessage').empty()
       
-      $.get('../assets/templates/failed.html', function (data) {
-        $('#statusMessage').append(data)
+      $('#statusMessage').empty()
+      $.get('/assets/templates/failed.html', function (data) {
+        data = data.replace("${response.status}", response.status.toLowerCase());
+        data = data.replace("${response.message}", response.message);
+        $('#statusMessage').append(ret)
       })
       receiptHTML = `
         <div>
@@ -183,12 +213,13 @@ function checkResponse(response) {
         $('#statusMessage').append(data)
       })
 
-      receiptHTML = `
-      <div>
-          <h2>TIMEOUT</h2>
-          <span> ` + response.message + `</span>
-      </div>`;
-
+      setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
+      break
+    default:
+      $('#statusMessage').empty()
+      $.get('../assets/templates/failed.html', function (data) {
+        $('#statusMessage').append(data)
+      })
 
       setTimeout(declineStep, 4000, receiptHTML)
       break
@@ -208,7 +239,6 @@ var refundDataResponseListener = function (event) {
 
     var data = JSON.parse(event.data)
     // get sales id. save into a gloabal const
-    debugger
 
     console.log(data)
 
@@ -251,7 +281,7 @@ var refundDataResponseListener = function (event) {
 
 
 var paymentDataResponseListener = function (event) {
-    debugger
+
     var result = getURLParameters()
     
     if (event.origin !== result.origin ) {
@@ -294,6 +324,7 @@ var paymentDataResponseListener = function (event) {
         }
       })
       .done(function (response) {
+        debugger;
         console.log(response)
   
         // Hide outcome buttons while we handle the response.
@@ -303,6 +334,7 @@ var paymentDataResponseListener = function (event) {
         checkResponse(response)
       })
       .fail(function (error) {
+        debugger;
         console.log(error)
   
         // Make sure status text is cleared.
@@ -375,7 +407,6 @@ function inIframe () {
 }
 
 function sendPayment() {
-    debugger
     // grab the purchase no from form
     var paymentCode = $("#paymentcode").val()
   
@@ -402,25 +433,20 @@ function sendPayment() {
       setTimeout(exitStep(), 4000)
     }
   
-    // We are going to send a data steup so we dynammically bind a listener so that we aren't 
-    // subscribing to all events
-    window.addEventListener(
-      'message',
-      paymentDataResponseListener,
-      false
-    )
-
+      // We are going to send a data steup so we dynammically bind a listener so that we aren't 
+      // subscribing to all events
+      window.addEventListener('message', paymentDataResponseListener, false)
+      
     // send the datastep
     if (inIframe()) {
-        dataStep();
+
+      dataStep();
     } else  {
-        // send the datastep
-        dataStep()
+      console.log("It does not appear this is contained in an iframe. This is unexpected and will not currently work.")
     }
+    
     return false
 }
-
-
 
 function cancelRefund(outcome) {
     console.log('cancelling refund')
@@ -485,24 +511,11 @@ function seeForm() {
 // On initial load of modal, configure the page settings such as removing the
 // close button and setting the header.
 $(function () {
-  
 
   // Send the SETUP step with our configuration values..  
   setupStep()
 
-  
-    // // We are going to send a data steup so we dynammically bind a listener so that we aren't 
-    // // subscribing to all events
-    // window.addEventListener(
-    //   'message',
-    //   paymentDataResponseListener,
-    //   false
-    // )
-  
-    // // send the datastep
-    // dataStep()
-
-  //$('#statusMessage').empty()
+  $('#statusMessage').empty()
   $.get('../assets/templates/waiting.html', function (data) {
     $('#statusMessage').append(data)
   })

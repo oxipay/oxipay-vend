@@ -453,7 +453,7 @@ func ProcessAuthorisationResponses() func(string) *ResponseCode {
 		"FPRA99": &ResponseCode{
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "DECLINED by Oxipay Gateway",
-			CustomerMessage: "DECLINED",
+			CustomerMessage: "Transaction has been declined by the Oxipay Gateway",
 		},
 		"EVAL02": &ResponseCode{
 			TxnStatus:  StatusFailed,
