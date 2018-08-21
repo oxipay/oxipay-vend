@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -19,14 +18,12 @@ import (
 	colour "github.com/bclicn/color"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
-
-	//"github.com/gorilla/sessions"
+	logrus "github.com/sirupsen/logrus"
 	"github.com/srinathgs/mysqlstore"
 	"github.com/vend/peg/internal/pkg/config"
 	"github.com/vend/peg/internal/pkg/oxipay"
 	"github.com/vend/peg/internal/pkg/terminal"
 	"github.com/vend/peg/internal/pkg/vend"
-
 	shortid "github.com/ventu-io/go-shortid"
 )
 
@@ -57,6 +54,8 @@ type Response struct {
 // DbSessionStore is the database session storage manager
 var DbSessionStore *mysqlstore.MySQLStore
 
+var log *logrus.Logger
+
 // SessionStore store of session data
 //var SessionStore *sessions.FilesystemStore
 
@@ -70,6 +69,14 @@ func main() {
 
 	// load config
 	appConfig, err := config.ReadApplicationConfig(configurationFile)
+
+	// init our logging framework
+	level, err := logrus.ParseLevel(appConfig.LogLevel)
+	if err != nil {
+		log.Fatalf("Level %s is not a valid log level. Try setting 'info' in production ", level)
+	}
+
+	var log = initLogger(level)
 
 	// configure Oxipay Module
 	oxipay.GatewayURL = appConfig.Oxipay.GatewayURL
@@ -100,6 +107,25 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 
 	// @todo handle shutdowns
+}
+
+func initLogger(logLevel logrus.Level) *logrus.Logger {
+
+	// Log as JSON instead of the default ASCII formatter.
+	// @todo make formatter configurable
+	logrus.SetFormatter(&logrus.JSONFormatter{})
+
+	log := logrus.StandardLogger()
+
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+	// @todo make output configurable
+	log.SetOutput(os.Stdout)
+
+	// Only log the warning severity or above.
+	log.SetLevel(logrus.WarnLevel)
+
+	return log
 }
 
 func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstore.MySQLStore {

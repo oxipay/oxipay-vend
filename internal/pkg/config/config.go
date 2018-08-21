@@ -39,7 +39,7 @@ type HostConfig struct {
 	Session    SessionConfig   `json:"session"`
 	Oxipay     OxipayConfig    `json:"oxipay"`
 	Background bool            `json:"background"`
-	Debug      bool            `json:"debug"`
+	LogLevel   string          `json:"log_level"`
 }
 
 // OxipayConfig data structure that represents a valid Oxipay configuration file entry
@@ -89,5 +89,7 @@ func validate(myconfig micro.Config) []error {
 			errs = append(errs, newErr)
 		}
 	}
+
+	// check the ensure the log level works
 	return errs
 }
