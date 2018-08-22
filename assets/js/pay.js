@@ -2,7 +2,7 @@
 
 var logger = window.log.getLogger({
     name: 'vend',
-    level: 'debug'
+    level: 'info'
 });
 
 
