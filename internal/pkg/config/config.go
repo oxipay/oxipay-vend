@@ -45,6 +45,7 @@ type HostConfig struct {
 // OxipayConfig data structure that represents a valid Oxipay configuration file entry
 type OxipayConfig struct {
 	GatewayURL string `json:"gateway_url"`
+	Version    string
 }
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
@@ -69,6 +70,10 @@ func ReadApplicationConfig(configFile string) (HostConfig, error) {
 		return hostConfiguration, errs[0]
 	}
 	err = conf.Scan(&hostConfiguration)
+
+	// hardcode this for now
+	// should load from a non-config file
+	hostConfiguration.Oxipay.Version = "1.1"
 
 	// map[cache:map[address:10.0.0.2 port:6379] database:map[address:10.0.0.1 port:3306]]
 	return hostConfiguration, err

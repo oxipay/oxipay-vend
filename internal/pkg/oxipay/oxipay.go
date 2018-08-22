@@ -9,23 +9,47 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"reflect"
 	"sort"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Version  which version of the proxy are we using
-const Version string = "1.0"
+//const Version string = "1.0"
 
 // GatewayURL Default URL for the Oxipay Gateway @todo get from config
-var GatewayURL = ""
+// var GatewayURL = ""
 
 // var GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
 
 //HTTPClientTimout default http client timeout
 const HTTPClientTimout = 0
+
+// Client exposes an interface to Oxipay
+type Client interface {
+	RegisterPosDevice(*OxipayRegistrationPayload) (*OxipayResponse, error)
+	ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
+	ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayResponse, error)
+	GetVersion() string
+}
+
+type oxipay struct {
+	GatewayURL string
+	Version    string
+	Log        *log.Logger
+}
+
+//NewOxipay returns a base struct on which all other functions operate
+func NewOxipay(gatewayURL string, version string, log *log.Logger) Client {
+	return &oxipay{
+		GatewayURL: gatewayURL,
+		Version:    version,
+		Log:        log,
+	}
+}
 
 // OxipayRegistrationPayload required to register a device with Oxipay
 type OxipayRegistrationPayload struct {
@@ -109,10 +133,14 @@ func Ping() string {
 	return "pong"
 }
 
+func (oc *oxipay) GetVersion() string {
+	return oc.Version
+}
+
 // RegisterPosDevice is used to register a new vend terminal
-func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
+func (oc *oxipay) RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
 	var err error
-	var CreateKeyURL = GatewayURL + "/CreateKey"
+	var CreateKeyURL = oc.GatewayURL + "/CreateKey"
 
 	oxipayResponse := new(OxipayResponse)
 
@@ -130,13 +158,11 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 	}
 
 	defer response.Body.Close()
-	log.Println("Register Response Status:", response.Status)
-	log.Println("Register Response Headers:", response.Header)
+	oc.Log.Debugf("Register Response Status:", response.Status)
+	oc.Log.Debugf("Register Response Headers:", response.Header)
 	body, _ := ioutil.ReadAll(response.Body)
-	log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
+	oc.Log.Debugf("ProcessAuthorisation Response Body: \n %v", string(body))
 
-	// turn {"x_purchase_number":"52011595","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"84b2ed2ec504a0aef134c3da57a060558de1290de7d5055ab8d070dd8354991b","tracking_data":null}
-	// into a struct
 	err = json.Unmarshal(body, oxipayResponse)
 
 	if err != nil {
@@ -149,17 +175,17 @@ func RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, err
 }
 
 // ProcessAuthorisation calls the ProcessAuthorisation Method
-func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
+func (oc *oxipay) ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
 
 	// ProcessAuthorisationURL is the URL of the POS API for ProcessAuthoorisation
-	var ProcessAuthorisationURL = GatewayURL + "/ProcessAuthorisation"
+	var ProcessAuthorisationURL = oc.GatewayURL + "/ProcessAuthorisation"
 
 	var err error
 	oxipayResponse := new(OxipayResponse)
 
 	jsonValue, _ := json.Marshal(oxipayPayload)
-	log.Printf("POST to URL %s \n", ProcessAuthorisationURL)
-	log.Println("Authorisation Payload: " + string(jsonValue))
+	oc.Log.Printf("POST to URL %s \n", ProcessAuthorisationURL)
+	oc.Log.Println("Authorisation Payload: " + string(jsonValue))
 
 	client := http.Client{}
 	client.Timeout = HTTPClientTimout
@@ -170,11 +196,11 @@ func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 	}
 	defer response.Body.Close()
 
-	log.Println("ProcessAuthorisation Response Status:", response.Status)
-	log.Println("ProcessAuthorisation Response Headers:", response.Header)
+	oc.Log.Println("ProcessAuthorisation Response Status:", response.Status)
+	oc.Log.Println("ProcessAuthorisation Response Headers:", response.Header)
 
 	body, _ := ioutil.ReadAll(response.Body)
-	log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
+	oc.Log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
 
 	err = json.Unmarshal(body, oxipayResponse)
 
@@ -182,23 +208,23 @@ func ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
 		return nil, err
 	}
 
-	log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
+	oc.Log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
 	return oxipayResponse, err
 }
 
 // ProcessSalesAdjustment provides a mechansim to perform a sales ajustment on an Oxipay schedule
-func ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayResponse, error) {
+func (oc *oxipay) ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayResponse, error) {
 
 	var err error
 
 	// ProcessSalesAdjustmentURL is the URL of the POS API for refunds
-	var ProcessSalesAdjustmentURL = GatewayURL + "/ProcessSalesAdjustment"
+	var ProcessSalesAdjustmentURL = oc.GatewayURL + "/ProcessSalesAdjustment"
 
 	oxipayResponse := new(OxipayResponse)
 
 	jsonValue, _ := json.Marshal(adjustment)
-	log.Printf("POST to URL %s \n", ProcessSalesAdjustmentURL)
-	log.Println(": " + string(jsonValue))
+	oc.Log.Printf("POST to URL %s \n", ProcessSalesAdjustmentURL)
+	oc.Log.Println(": " + string(jsonValue))
 
 	client := http.Client{}
 	client.Timeout = HTTPClientTimout
@@ -209,11 +235,11 @@ func ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayRe
 	}
 	defer response.Body.Close()
 
-	log.Println("ProcessSalesAdjustment Response Status:", response.Status)
-	log.Println("ProcessSalesAdjustment Response Headers:", response.Header)
+	oc.Log.Println("ProcessSalesAdjustment Response Status:", response.Status)
+	oc.Log.Println("ProcessSalesAdjustment Response Headers:", response.Header)
 
 	body, _ := ioutil.ReadAll(response.Body)
-	log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
+	oc.Log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
 
 	err = json.Unmarshal(body, oxipayResponse)
 
@@ -221,19 +247,17 @@ func ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayRe
 		return nil, err
 	}
 
-	log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
+	oc.Log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
 	return oxipayResponse, err
 
 }
 
 // SignMessage will generate an HMAC of the plaintext
 func SignMessage(plainText string, signingKey string) string {
-
 	key := []byte(signingKey)
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(plainText))
 	macString := hex.EncodeToString(mac.Sum(nil))
-	log.Printf("Oxipay Signature: %s \n", macString)
 	return macString
 }
 
@@ -248,13 +272,13 @@ func (payload *OxipayRegistrationPayload) Validate() error {
 }
 
 //Authenticate validates HMAC
-func (r *OxipayResponse) Authenticate(key string) bool {
+func (r *OxipayResponse) Authenticate(key string) (bool, error) {
 	responsePlainText := GeneratePlainTextSignature(r)
 
 	if len(r.Signature) >= 0 {
 		return CheckMAC([]byte(responsePlainText), []byte(r.Signature), []byte(key))
 	}
-	return false
+	return false, errors.New("Plaintext is signature is 0 length")
 }
 
 // GeneratePlainTextSignature will generate an Oxipay plain text message ready for signing
@@ -303,31 +327,23 @@ func GeneratePlainTextSignature(payload interface{}) string {
 		}
 	}
 	plainText := buffer.String()
-	log.Printf("Signature Plain Text: %s \n", plainText)
 	return plainText
 }
 
 // CheckMAC used to validate responses from the remote server
-func CheckMAC(message []byte, messageMAC []byte, key []byte) bool {
+func CheckMAC(message []byte, messageMAC []byte, key []byte) (bool, error) {
 	mac := hmac.New(sha256.New, key)
 	_, err := mac.Write(message)
-
-	if err != nil {
-		log.Println(err)
-		return false
-	}
 
 	expectedMAC := hex.EncodeToString(mac.Sum(nil))
 
 	// we use hmac.Equal because regular equality (i.e == ) is subject to timing attacks
 	isGood := hmac.Equal(messageMAC, []byte(expectedMAC))
 
-	if isGood == false {
-		log.Printf("Signature mismatch: expected %s, got %s \n", messageMAC, expectedMAC)
-	}
-	return isGood
+	return isGood, err
 }
 
+// ProcessRegistrationResponse provides a function to map an Oxipay CreateKey response to something we can pass back to the client
 func ProcessRegistrationResponse() func(string) *ResponseCode {
 	innerMap := map[string]*ResponseCode{
 		"SCRK01": &ResponseCode{
