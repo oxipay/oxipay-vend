@@ -60,6 +60,10 @@ var appConfig *config.HostConfig
 
 var oxipayClient oxipay.Client
 
+var db *sql.DB
+
+var term terminal.Terminal
+
 func main() {
 	// default configuration file for prod
 	configurationFile := "/etc/vendproxy/vendproxy.json"
@@ -82,9 +86,18 @@ func main() {
 		log.Fatalf("Configuration Error: %s ", err)
 	}
 
-	db := connectToDatabase(appConfig.Database)
-	terminal.Db = db
+	db = connectToDatabase(appConfig.Database)
+
 	DbSessionStore = initSessionStore(db, appConfig.Session)
+
+	// create a reference to the Oxipay Client
+	oxipayClient = oxipay.NewOxipay(
+		appConfig.Oxipay.GatewayURL,
+		appConfig.Oxipay.Version,
+		log,
+	)
+
+	term = terminal.NewTerminal(db)
 
 	// We are hosting all of the content in ./assets, as the resources are
 	// required by the frontend.
@@ -99,12 +112,6 @@ func main() {
 	port := strconv.FormatInt(int64(appConfig.Webserver.Port), 10)
 
 	log.Infof("Starting webserver on port %s \n", port)
-
-	oxipayClient := oxipay.NewOxipay(
-		appConfig.Oxipay.GatewayURL,
-		appConfig.Oxipay.Version,
-		log,
-	)
 
 	//defer sessionStore.Close()
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -267,7 +274,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				if browserResponse.Status == statusAccepted {
 					log.Info("Device Successfully Registered in Oxipay")
 
-					terminal := terminal.NewTerminal(
+					register := terminal.Register(
 						response.Key,
 						registrationPayload.DeviceID,
 						registrationPayload.MerchantID,
@@ -275,7 +282,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 						vendPaymentRequest.RegisterID,
 					)
 
-					_, err := terminal.Save("vend-proxy")
+					_, err := register.Save("vend-proxy")
 					if err != nil {
 						log.Error(err)
 						browserResponse.Message = "Unable to process request"
@@ -502,7 +509,7 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	x, err := getPaymentRequestFromSession(r)
 
 	if err != nil {
-		log.Print(err)
+		log.Error(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
 		return
 	}
@@ -516,7 +523,9 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 		AmountFloat:    x.AmountFloat,
 	}
 
-	terminal, err := terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
+	terminal := terminal.NewTerminal(db)
+
+	register, err := terminal.GetRegister(vReq.Origin, vReq.RegisterID)
 	if err != nil {
 		// redirect to registration page
 		http.Redirect(w, r, "/register", http.StatusFound)
@@ -526,8 +535,8 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	txnRef, err := shortid.Generate()
 	var oxipayPayload = &oxipay.OxipaySalesAdjustmentPayload{
 		Amount:            strings.Replace(vReq.Amount, "-", "", 1),
-		MerchantID:        terminal.FxlSellerID,
-		DeviceID:          terminal.FxlRegisterID,
+		MerchantID:        register.FxlSellerID,
+		DeviceID:          register.FxlRegisterID,
 		FirmwareVersion:   "vend_integration_v0.0.1",
 		OperatorID:        "Vend",
 		PurchaseRef:       vReq.PurchaseNumber,
@@ -543,7 +552,7 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debugf("Oxipay signature: %s \n", oxipayPayload.Signature)
 
 	// send authorisation to oxipay
-	oxipayResponse := oxipayClient.ProcessAuthorisation(oxipayPayload)
+	oxipayResponse, err := oxipayClient.ProcessSalesAdjustment(oxipayPayload)
 
 	if err != nil {
 		// log the raw response
@@ -596,8 +605,6 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Infof("Processing Payment using Oxipay register %s ", terminal.FxlRegisterID)
 
-	// txnRef, err := shortid.Generate()
-
 	// send off to Oxipay
 	//var oxipayPayload
 	var oxipayPayload = &oxipay.OxipayPayload{
@@ -631,7 +638,8 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ensure the response has come from Oxipay
-	if !oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey) {
+	validSignature, err := oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey)
+	if !validSignature || err != nil {
 		browserResponse.Message = "The signature does not match the expected signature"
 		browserResponse.HTTPStatus = http.StatusBadRequest
 	} else {
@@ -640,7 +648,6 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendResponse(w, r, browserResponse)
-
 	return
 }
 

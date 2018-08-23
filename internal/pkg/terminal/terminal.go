@@ -3,11 +3,10 @@ package terminal
 import (
 	"database/sql"
 	"errors"
-	"log"
 )
 
 // Terminal terminal mapping
-type Terminal struct {
+type Register struct {
 	FxlRegisterID       string // Oxipay registerid
 	FxlSellerID         string
 	FxlDeviceSigningKey string
@@ -15,12 +14,24 @@ type Terminal struct {
 	VendRegisterID      string
 }
 
-//Db connection to the database
-var Db *sql.DB
+// Terminal terminal mapping
+type Terminal struct {
+	Db *sql.DB
+}
 
-//NewTerminal returns a Pointer to a terminal
-func NewTerminal(key string, deviceID string, merchantID string, origin string, registerID string) *Terminal {
+// Db connection to the database
+var db *sql.DB
+
+// NewTerminal Used to marshall the DB connection
+func NewTerminal(db *sql.DB) *Terminal {
 	return &Terminal{
+		Db: db,
+	}
+}
+
+// NewRegister returns a Pointer to a terminal
+func NewRegister(key string, deviceID string, merchantID string, origin string, registerID string, db *sql.DB) *Register {
+	return &Register{
 		FxlDeviceSigningKey: key,
 		FxlRegisterID:       deviceID,
 		FxlSellerID:         merchantID, // Oxipay Merchant No
@@ -30,9 +41,9 @@ func NewTerminal(key string, deviceID string, merchantID string, origin string, 
 }
 
 //Save will save the terminal to the database
-func (t Terminal) Save(user string) (bool, error) {
+func (t Terminal) Save(user string, register Register) (bool, error) {
 
-	if Db == nil {
+	if t.Db == nil {
 		return false, errors.New("I have no database connection")
 	}
 
@@ -47,7 +58,7 @@ func (t Terminal) Save(user string) (bool, error) {
 			created_by
 		) VALUES (?, ?, ?, ?, ?, ?) `
 
-	stmt, err := Db.Prepare(query)
+	stmt, err := t.Db.Prepare(query)
 
 	if err != nil {
 		return false, err
@@ -56,11 +67,11 @@ func (t Terminal) Save(user string) (bool, error) {
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		newNullString(t.FxlRegisterID),
-		newNullString(t.FxlSellerID),
-		newNullString(t.FxlDeviceSigningKey),
-		newNullString(t.Origin),
-		newNullString(t.VendRegisterID),
+		newNullString(register.FxlRegisterID),
+		newNullString(register.FxlSellerID),
+		newNullString(register.FxlDeviceSigningKey),
+		newNullString(register.Origin),
+		newNullString(register.VendRegisterID),
 		newNullString(user),
 	)
 
@@ -71,10 +82,10 @@ func (t Terminal) Save(user string) (bool, error) {
 	return true, nil
 }
 
-// GetRegisteredTerminal will return a registered terminal for the the domain & vendregister_id combo
-func GetRegisteredTerminal(originDomain string, vendRegisterID string) (*Terminal, error) {
+// GetRegister will return a registered terminal for the the domain & vendregister_id combo
+func (t Terminal) GetRegister(originDomain string, vendRegisterID string) (*Register, error) {
 
-	if Db == nil {
+	if t.Db == nil {
 		return nil, errors.New("I have no database connection")
 	}
 
@@ -92,34 +103,31 @@ func GetRegisteredTerminal(originDomain string, vendRegisterID string) (*Termina
 				vend_register_id = ? 
 			AND 1=1`
 
-	rows, err := Db.Query(sql, originDomain, vendRegisterID)
+	rows, err := t.Db.Query(sql, originDomain, vendRegisterID)
 
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var terminal = new(Terminal)
+	var register = new(Register)
 	noRows := 0
 
 	for rows.Next() {
 		noRows++
-		var err = rows.Scan(
-			&terminal.FxlRegisterID,
-			&terminal.FxlSellerID,
-			&terminal.FxlDeviceSigningKey,
-			&terminal.Origin,
-			&terminal.VendRegisterID,
+		err = rows.Scan(
+			&register.FxlRegisterID,
+			&register.FxlSellerID,
+			&register.FxlDeviceSigningKey,
+			&register.Origin,
+			&register.VendRegisterID,
 		)
-		if err != nil {
-			log.Fatal(err)
-		}
+
+	}
+	if err != nil {
+		return register, err
 	}
 
 	if noRows < 1 {
 		return nil, errors.New("Unable to find a matching terminal ")
 	}
 
-	return terminal, nil
+	return register, err
 }
 
 func newNullString(s string) sql.NullString {
