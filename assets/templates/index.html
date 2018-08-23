@@ -1,46 +1,34 @@
 <!DOCTYPE html>
 <html>
 
-<head>
-  <title>
-    Pay Example
-  </title>
+    <head>
+        <title>Pay</title>
 
-  <link rel="icon" href="/assets/images/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" type="text/css" href="/assets/css/vend-peg.css">
-  <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
-  <script src="/assets/js/jquery-3.1.0.min.js" crossorigin="anonymous"></script>
+        <link rel="icon" href="/assets/images/favicon.ico" type="image/x-icon" />
+        <link rel="stylesheet" type="text/css" href="/assets/css/vend-peg.css" />
+        <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" />
+        <script src="/assets/js/jquery-3.1.0.min.js" crossorigin="anonymous"></script>            
+        <script src="/assets/js/loglevelnext.min.js"></script>
+        <script src="/assets/js/pay.js"></script>
+    </head>
+
+    <div class="container center">
+        <div id="statusMessage"></div>
     
-  <script src="/assets/js/pay.js"></script>
-</head>
-
-<div class="container center">
-  <div id="statusMessage"></div>
-  
-  <div id="outcomes">
-    <form>
-      <label>Payment Code</label>
-      <input maxlength="6" minlength="6" pattern="/(0-9){6}/" />
-
-    </form>
-    <div class="center-text">
-      <button class="vd-button vd-button--primary" onclick="sendPayment('accept');">
-        Accept
-      </button>
-      <!-- <button class="vd-button vd-button--negative" onclick="sendPayment('decline');">
-        Decline
-      </button>
-      <button class="vd-button vd-button--negative" onclick="sendPayment('timeout');">
-        Timeout
-      </button> -->
-      <button class="vd-button vd-button--secondary" onclick="cancelPayment();">
-        Cancel
-      </button>
-      <p><a href="javascript:void(0)" class="vd-link" onclick="seeForm();">See how to add form elements</a></p>
+            <div id="outcomes">
+                <form action="/pay" method="POST" id="paymentform">
+                    <div class="form-group">
+                        <label id="paymentcodelabel" for="paymentcode">Enter Payment Code</label>
+                        <input maxlength="6" minlength="6"  name="paymentcode" id="paymentcode" pattern="/(0-9){6}/" />
+                    </div>
+                </form>
+                <div class="form-group">
+                    <div class="center-text">
+                        <button class="vd-button vd-button--primary" onclick="sendPayment('accept');">Process</button>
+                        <button class="vd-button vd-button--secondary" onclick="cancelPayment();">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-
-
-  </div>
-</div>
-
 </html>

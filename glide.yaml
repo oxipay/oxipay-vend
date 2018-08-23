@@ -1,2 +1,11 @@
 package: github.com/vend/peg
-import: []
+import:
+- package: github.com/go-sql-driver/mysql
+- package: github.com/gorilla/sessions
+- package: github.com/srinathgs/mysqlstore
+- package: github.com/ventu-io/go-shortid
+- package: github.com/bclicn/color
+- package: github.com/nu7hatch/gouuid
+- package: "github.com/micro/go-config"
+- package: "github.com/micro/go-config/source/file"
+- package: "github.com/sirupsen/logrus"

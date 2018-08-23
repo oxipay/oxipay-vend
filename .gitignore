@@ -18,3 +18,13 @@
 
 bower_components
 node_modules
+*.lock
+# Glide Vendor
+vendor/
+vendor/*
+
+# environment files
+*.env
+
+vendproxy
+debug

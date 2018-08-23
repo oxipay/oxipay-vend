@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <title>Refund</title>
+
+        <link rel="icon" href="/assets/images/favicon.ico" type="image/x-icon">
+        <link rel="stylesheet" type="text/css" href="/assets/css/vend-peg.css">
+        <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+        <script src="/assets/js/jquery-3.1.0.min.js" crossorigin="anonymous"></script>
+        <script src="/assets/js/loglevelnext.min.js"></script>
+        <script src="/assets/js/pay.js"></script>
+    </head>
+
+    <div class="container center">
+        <div id="statusMessage">
+            <img src="/assets/images/receipt.png" />
+        </div>
+            <div id="outcomes">
+                <form action="/refund" method="POST" id="paymentform">
+                    <div class="form-group">
+                        <label id="purchasenolabel" for="purchaseno">Oxipay Purchase #:</label>
+                        <input name="purchaseno" id="purchaseno" />
+                    </div>
+                </form>
+                <div class="form-group">
+                    <div class="center-text">
+                        <button class="vd-button vd-button--primary" onclick="sendRefund();">Refund</button>
+                        <button class="vd-button vd-button--secondary" onclick="cancelRefund();">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</html>

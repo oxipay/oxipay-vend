@@ -1,0 +1,26 @@
+{
+    "webserver": {
+        "port": 5000,
+        "address": "127.0.0.1"
+    },
+    "database": {
+        "username": "root",
+		"password": "t9e3ioz0",
+		"host":     "172.18.0.2",
+		"name":     "vend",
+		"timeout":  3600
+    }, 
+    "session": {
+        "domain":   "", 
+		"path":     "/",
+		"maxage":   3600,
+        "httponly": true,
+        "secret": "secretkey"
+    },
+    "log_level": "debug",
+    "background": true,
+    "oxipay": {
+        "gateway_url": "https://sandboxpos.oxipay.com.au/webapi/v1/"
+
+    }
+}

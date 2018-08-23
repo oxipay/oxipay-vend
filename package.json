@@ -24,5 +24,8 @@
   "bugs": {
     "url": "https://github.com/vend/peg/issues"
   },
-  "homepage": "https://github.com/vend/peg#readme"
+  "homepage": "https://github.com/vend/peg#readme",
+  "dependencies": {
+    "loglevelnext": "^2.0.1"
+  }
 }
