@@ -30,7 +30,7 @@ func NewTerminal(db *sql.DB) *Terminal {
 }
 
 // NewRegister returns a Pointer to a terminal
-func NewRegister(key string, deviceID string, merchantID string, origin string, registerID string, db *sql.DB) *Register {
+func NewRegister(key string, deviceID string, merchantID string, origin string, registerID string) *Register {
 	return &Register{
 		FxlDeviceSigningKey: key,
 		FxlRegisterID:       deviceID,
@@ -41,12 +41,7 @@ func NewRegister(key string, deviceID string, merchantID string, origin string, 
 }
 
 //Save will save the terminal to the database
-func (t Terminal) Save(user string, register Register) (bool, error) {
-
-	if t.Db == nil {
-		return false, errors.New("I have no database connection")
-	}
-
+func (t Terminal) Save(user string, register *Register) (bool, error) {
 	query := `INSERT INTO 
 		oxipay_vend_map  
 		(
@@ -84,10 +79,6 @@ func (t Terminal) Save(user string, register Register) (bool, error) {
 
 // GetRegister will return a registered terminal for the the domain & vendregister_id combo
 func (t Terminal) GetRegister(originDomain string, vendRegisterID string) (*Register, error) {
-
-	if t.Db == nil {
-		return nil, errors.New("I have no database connection")
-	}
 
 	sql := `SELECT 
 			 fxl_register_id, 
