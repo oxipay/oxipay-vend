@@ -1,0 +1,9 @@
+FROM golang:1.10
+COPY . /go/src/github.com/oxipay/oxipay-vend
+WORKDIR /go/src/github.com/oxipay/oxipay-vend/CMD
+RUN CGO_ENABLED=0 go build vendproxy.go
+
+FROM alpine:3.7
+RUN apk add --no-cache ca-certificates
+COPY --from=0 /go/src/bitbucket.code.company-name.com.au/scm/code/main .
+CMD ["./main"]
