@@ -77,7 +77,7 @@ func main() {
 	// init our logging framework
 	level, err := logrus.ParseLevel(appConfig.LogLevel)
 	if err != nil {
-		log.Fatalf("Level %s is not a valid log level. Try setting 'info' in production ", level)
+		logrus.Fatalf("Level %s is not a valid log level. Try setting 'info' in production ", level)
 	}
 
 	log = initLogger(level)
