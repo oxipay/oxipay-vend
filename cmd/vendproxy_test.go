@@ -13,10 +13,11 @@ import (
 	"testing"
 
 	uuid "github.com/nu7hatch/gouuid"
-	"github.com/vend/peg/internal/pkg/config"
-	"github.com/vend/peg/internal/pkg/oxipay"
-	"github.com/vend/peg/internal/pkg/terminal"
-	"github.com/vend/peg/internal/pkg/vend"
+	"github.com/oxipay/oxipay-vend/internal/pkg/config"
+	"github.com/oxipay/oxipay-vend/internal/pkg/oxipay"
+	"github.com/oxipay/oxipay-vend/internal/pkg/terminal"
+	"github.com/oxipay/oxipay-vend/internal/pkg/vend"
+
 	shortid "github.com/ventu-io/go-shortid"
 )
 

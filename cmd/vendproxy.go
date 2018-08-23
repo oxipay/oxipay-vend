@@ -17,12 +17,12 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
+	"github.com/oxipay/oxipay-vend/internal/pkg/config"
+	"github.com/oxipay/oxipay-vend/internal/pkg/oxipay"
+	"github.com/oxipay/oxipay-vend/internal/pkg/terminal"
+	"github.com/oxipay/oxipay-vend/internal/pkg/vend"
 	logrus "github.com/sirupsen/logrus"
 	"github.com/srinathgs/mysqlstore"
-	"github.com/vend/peg/internal/pkg/config"
-	"github.com/vend/peg/internal/pkg/oxipay"
-	"github.com/vend/peg/internal/pkg/terminal"
-	"github.com/vend/peg/internal/pkg/vend"
 	shortid "github.com/ventu-io/go-shortid"
 )
 
