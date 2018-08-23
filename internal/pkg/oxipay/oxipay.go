@@ -14,25 +14,21 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sirupsen/logrus"
+
 	log "github.com/sirupsen/logrus"
 )
-
-// Version  which version of the proxy are we using
-//const Version string = "1.0"
-
-// GatewayURL Default URL for the Oxipay Gateway @todo get from config
-// var GatewayURL = ""
-
-// var GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/"
 
 //HTTPClientTimout default http client timeout
 const HTTPClientTimout = 0
 
+const defaultResponseCode = "EISE01"
+
 // Client exposes an interface to Oxipay
 type Client interface {
-	RegisterPosDevice(*OxipayRegistrationPayload) (*OxipayResponse, error)
-	ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error)
-	ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayResponse, error)
+	RegisterPosDevice(*RegistrationPayload) (*Response, error)
+	ProcessAuthorisation(oxipayPayload *AuthorisationPayload) (*Response, error)
+	ProcessSalesAdjustment(adjustment *SalesAdjustmentPayload) (*Response, error)
 	GetVersion() string
 }
 
@@ -51,8 +47,8 @@ func NewOxipay(gatewayURL string, version string, log *log.Logger) Client {
 	}
 }
 
-// OxipayRegistrationPayload required to register a device with Oxipay
-type OxipayRegistrationPayload struct {
+// RegistrationPayload required to register a device with Oxipay
+type RegistrationPayload struct {
 	MerchantID      string `json:"x_merchant_id"`
 	DeviceID        string `json:"x_device_id"`
 	DeviceToken     string `json:"x_device_token"`
@@ -63,8 +59,8 @@ type OxipayRegistrationPayload struct {
 	Signature       string `json:"signature"`
 }
 
-// OxipayPayload Payload used to send to Oxipay
-type OxipayPayload struct {
+// AuthorisationPayload Payload used to send to Oxipay
+type AuthorisationPayload struct {
 	MerchantID        string `json:"x_merchant_id"`
 	DeviceID          string `json:"x_device_id"`
 	OperatorID        string `json:"x_operator_id"`
@@ -76,8 +72,8 @@ type OxipayPayload struct {
 	Signature         string `json:"signature"`
 }
 
-// OxipayResponse is the response returned from Oxipay for both a CreateKey and Sales Adjustment
-type OxipayResponse struct {
+// Response is the response returned from Oxipay for both a CreateKey and Sales Adjustment
+type Response struct {
 	PurchaseNumber string `json:"x_purchase_number,omitempty"`
 	Status         string `json:"x_status,omitempty"`
 	Code           string `json:"x_code,omitempty"`
@@ -86,8 +82,8 @@ type OxipayResponse struct {
 	Signature      string `json:"signature"`
 }
 
-// OxipaySalesAdjustmentPayload holds a request to Oxipay for the ProcessAdjustment
-type OxipaySalesAdjustmentPayload struct {
+// SalesAdjustmentPayload holds a request to Oxipay for the ProcessAdjustment
+type SalesAdjustmentPayload struct {
 	PosTransactionRef string `json:"x_pos_transaction_ref"`
 	PurchaseRef       string `json:"x_purchase_ref"`
 	MerchantID        string `json:"x_merchant_id"`
@@ -123,7 +119,6 @@ const (
 	Adjustment ResponseType = iota
 	// Authorisation ProcessAuthorisation
 	Authorisation ResponseType = iota
-
 	// Registration Result of CreateKey
 	Registration ResponseType = iota
 )
@@ -138,117 +133,74 @@ func (oc *oxipay) GetVersion() string {
 }
 
 // RegisterPosDevice is used to register a new vend terminal
-func (oc *oxipay) RegisterPosDevice(payload *OxipayRegistrationPayload) (*OxipayResponse, error) {
-	var err error
-	var CreateKeyURL = oc.GatewayURL + "/CreateKey"
-
-	oxipayResponse := new(OxipayResponse)
+func (oc *oxipay) RegisterPosDevice(payload *RegistrationPayload) (*Response, error) {
+	contextLogger := oc.Log.WithFields(log.Fields{
+		"module":    "oxipay",
+		"call":      "RegisterPosDevice",
+		"device_id": payload.DeviceID,
+	})
 
 	jsonValue, _ := json.Marshal(payload)
-
-	log.Printf("POST to URL %s", CreateKeyURL)
-	log.Printf("Register POS Device Payload: %s", string(jsonValue))
-
-	client := http.Client{}
-	client.Timeout = HTTPClientTimout
-	response, responseErr := client.Post(CreateKeyURL, "application/json", bytes.NewBuffer(jsonValue))
-
-	if responseErr != nil {
-		return oxipayResponse, responseErr
-	}
-
-	defer response.Body.Close()
-	oc.Log.Debugf("Register Response Status:", response.Status)
-	oc.Log.Debugf("Register Response Headers:", response.Header)
-	body, _ := ioutil.ReadAll(response.Body)
-	oc.Log.Debugf("ProcessAuthorisation Response Body: \n %v", string(body))
-
-	err = json.Unmarshal(body, oxipayResponse)
-
-	if err != nil {
-		log.Println(err)
-		return nil, errors.New("Unable to unmarshall response from server")
-	}
-
-	log.Printf("Unmarshalled Register POS Response Body: %s \n", oxipayResponse)
-	return oxipayResponse, err
+	return post(oc.GatewayURL+"/CreateKey", jsonValue, contextLogger)
 }
 
 // ProcessAuthorisation calls the ProcessAuthorisation Method
-func (oc *oxipay) ProcessAuthorisation(oxipayPayload *OxipayPayload) (*OxipayResponse, error) {
+func (oc *oxipay) ProcessAuthorisation(payload *AuthorisationPayload) (*Response, error) {
+	contextLogger := oc.Log.WithFields(log.Fields{
+		"module":      "oxipay",
+		"call":        "ProcessAuthorisation",
+		"device_id":   payload.DeviceID,
+		"merchant_id": payload.MerchantID,
+	})
 
-	// ProcessAuthorisationURL is the URL of the POS API for ProcessAuthoorisation
-	var ProcessAuthorisationURL = oc.GatewayURL + "/ProcessAuthorisation"
+	jsonValue, _ := json.Marshal(payload)
+	return post(oc.GatewayURL+"/ProcessAuthorisation", jsonValue, contextLogger)
+}
+
+func post(url string, jsonValue []byte, contextLogger *logrus.Entry) (*Response, error) {
 
 	var err error
-	oxipayResponse := new(OxipayResponse)
+	oxipayResponse := new(Response)
 
-	jsonValue, _ := json.Marshal(oxipayPayload)
-	oc.Log.Printf("POST to URL %s \n", ProcessAuthorisationURL)
-	oc.Log.Println("Authorisation Payload: " + string(jsonValue))
+	contextLogger.Debugf("POST to : %s , %s \n", url, string(jsonValue))
 
 	client := http.Client{}
 	client.Timeout = HTTPClientTimout
-	response, responseErr := client.Post(ProcessAuthorisationURL, "application/json", bytes.NewBuffer(jsonValue))
+	response, responseErr := client.Post(url, "application/json", bytes.NewBuffer(jsonValue))
 
 	if responseErr != nil {
 		return oxipayResponse, responseErr
 	}
 	defer response.Body.Close()
 
-	oc.Log.Println("ProcessAuthorisation Response Status:", response.Status)
-	oc.Log.Println("ProcessAuthorisation Response Headers:", response.Header)
+	contextLogger.Debugf(
+		"Response: status =  %s header = %s \n",
+		response.Status,
+		response.Header,
+	)
 
 	body, _ := ioutil.ReadAll(response.Body)
-	oc.Log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
+	contextLogger.Debugf("Response Body: \n %s", string(body))
 
 	err = json.Unmarshal(body, oxipayResponse)
 
-	if err != nil {
-		return nil, err
-	}
+	contextLogger.Debugf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
 
-	oc.Log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
 	return oxipayResponse, err
 }
 
 // ProcessSalesAdjustment provides a mechansim to perform a sales ajustment on an Oxipay schedule
-func (oc *oxipay) ProcessSalesAdjustment(adjustment *OxipaySalesAdjustmentPayload) (*OxipayResponse, error) {
+func (oc *oxipay) ProcessSalesAdjustment(adjustment *SalesAdjustmentPayload) (*Response, error) {
 
-	var err error
-
-	// ProcessSalesAdjustmentURL is the URL of the POS API for refunds
-	var ProcessSalesAdjustmentURL = oc.GatewayURL + "/ProcessSalesAdjustment"
-
-	oxipayResponse := new(OxipayResponse)
+	contextLogger := oc.Log.WithFields(log.Fields{
+		"module":      "oxipay",
+		"call":        "ProcessSalesAdjustment",
+		"device_id":   adjustment.DeviceID,
+		"merchant_id": adjustment.MerchantID,
+	})
 
 	jsonValue, _ := json.Marshal(adjustment)
-	oc.Log.Printf("POST to URL %s \n", ProcessSalesAdjustmentURL)
-	oc.Log.Println(": " + string(jsonValue))
-
-	client := http.Client{}
-	client.Timeout = HTTPClientTimout
-	response, responseErr := client.Post(ProcessSalesAdjustmentURL, "application/json", bytes.NewBuffer(jsonValue))
-
-	if responseErr != nil {
-		return oxipayResponse, responseErr
-	}
-	defer response.Body.Close()
-
-	oc.Log.Println("ProcessSalesAdjustment Response Status:", response.Status)
-	oc.Log.Println("ProcessSalesAdjustment Response Headers:", response.Header)
-
-	body, _ := ioutil.ReadAll(response.Body)
-	oc.Log.Printf("ProcessAuthorisation Response Body: \n %v", string(body))
-
-	err = json.Unmarshal(body, oxipayResponse)
-
-	if err != nil {
-		return nil, err
-	}
-
-	oc.Log.Printf("Unmarshalled Oxipay Response Body: %v \n", oxipayResponse)
-	return oxipayResponse, err
+	return post(oc.GatewayURL+"/ProcessSalesAdjustment", jsonValue, contextLogger)
 
 }
 
@@ -262,17 +214,16 @@ func SignMessage(plainText string, signingKey string) string {
 }
 
 // Validate will perform validation on a OxipayRegistrationPayload
-func (payload *OxipayRegistrationPayload) Validate() error {
-
+func (payload *RegistrationPayload) Validate() error {
+	// @todo more validation here
 	if payload == nil {
 		return errors.New("payload is empty")
 	}
-
 	return nil
 }
 
 //Authenticate validates HMAC
-func (r *OxipayResponse) Authenticate(key string) (bool, error) {
+func (r *Response) Authenticate(key string) (bool, error) {
 	responsePlainText := GeneratePlainTextSignature(r)
 
 	if len(r.Signature) >= 0 {
@@ -385,7 +336,7 @@ func ProcessRegistrationResponse() func(string) *ResponseCode {
 		ret := innerMap[key]
 
 		if ret == nil {
-			return innerMap["EISE01"]
+			return innerMap[defaultResponseCode]
 		}
 		return ret
 	}
@@ -495,7 +446,7 @@ func ProcessAuthorisationResponses() func(string) *ResponseCode {
 		ret := innerMap[key]
 
 		if ret == nil {
-			return innerMap["EISE01"]
+			return innerMap[defaultResponseCode]
 		}
 		return ret
 	}
@@ -586,7 +537,7 @@ func ProcessSalesAdjustmentResponse() func(string) *ResponseCode {
 		ret := innerMap[key]
 
 		if ret == nil {
-			return innerMap["EISE01"]
+			return innerMap[defaultResponseCode]
 		}
 		return ret
 	}

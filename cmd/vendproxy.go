@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	colour "github.com/bclicn/color"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	logrus "github.com/sirupsen/logrus"
@@ -62,7 +61,7 @@ var oxipayClient oxipay.Client
 
 var db *sql.DB
 
-var term terminal.Terminal
+var term *terminal.Terminal
 
 func main() {
 	// default configuration file for prod
@@ -81,7 +80,7 @@ func main() {
 		log.Fatalf("Level %s is not a valid log level. Try setting 'info' in production ", level)
 	}
 
-	var log = initLogger(level)
+	log = initLogger(level)
 	if err != nil {
 		log.Fatalf("Configuration Error: %s ", err)
 	}
@@ -121,21 +120,15 @@ func main() {
 
 func initLogger(logLevel logrus.Level) *logrus.Logger {
 
-	// Log as JSON instead of the default ASCII formatter.
-	// @todo make formatter configurable
-	logrus.SetFormatter(&logrus.JSONFormatter{})
+	logger := logrus.New()
+	logger.Formatter = &logrus.JSONFormatter{}
 
-	log := logrus.StandardLogger()
-
-	// Output to stdout instead of the default stderr
-	// Can be any io.Writer, see below for File example
-	// @todo make output configurable
-	log.SetOutput(os.Stdout)
+	logger.SetOutput(os.Stdout)
 
 	// Only log the warning severity or above.
-	log.SetLevel(logrus.WarnLevel)
+	logger.SetLevel(logLevel)
 
-	return log
+	return logger
 }
 
 func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstore.MySQLStore {
@@ -197,13 +190,13 @@ func getPaymentRequestFromSession(r *http.Request) (*vend.PaymentRequest, error)
 		_ = session
 		return nil, err
 	}
+
 	// get the vendRequest from the session
 	vReq := session.Values["vReq"]
 	vendPaymentRequest, ok := vReq.(*vend.PaymentRequest)
 
 	if !ok {
 		msg := "Can't get vRequest from session"
-		log.Error(msg)
 		return nil, errors.New(msg)
 	}
 	return vendPaymentRequest, err
@@ -218,7 +211,6 @@ func getSession(r *http.Request, sessionName string) (*sessions.Session, error) 
 	// ensure that we have a session
 	session, err := DbSessionStore.Get(r, sessionName)
 	if err != nil {
-		log.Error(err)
 		return session, err
 	}
 	return session, nil
@@ -274,7 +266,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				if browserResponse.Status == statusAccepted {
 					log.Info("Device Successfully Registered in Oxipay")
 
-					register := terminal.Register(
+					register := terminal.NewRegister(
 						response.Key,
 						registrationPayload.DeviceID,
 						registrationPayload.MerchantID,
@@ -282,7 +274,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 						vendPaymentRequest.RegisterID,
 					)
 
-					_, err := register.Save("vend-proxy")
+					_, err := term.Save("vend-proxy", register)
 					if err != nil {
 						log.Error(err)
 						browserResponse.Message = "Unable to process request"
@@ -308,7 +300,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func processOxipayResponse(oxipayResponse *oxipay.OxipayResponse, responseType oxipay.ResponseType, amount string) *Response {
+func processOxipayResponse(oxipayResponse *oxipay.Response, responseType oxipay.ResponseType, amount string) *Response {
 
 	// Specify an external transaction ID. This value can be sent back to Vend with
 	// the "ACCEPT" step as the JSON key "transaction_id".
@@ -363,7 +355,7 @@ func processOxipayResponse(oxipayResponse *oxipay.OxipayResponse, responseType o
 	return response
 }
 
-func bindToRegistrationPayload(r *http.Request) (*oxipay.OxipayRegistrationPayload, error) {
+func bindToRegistrationPayload(r *http.Request) (*oxipay.RegistrationPayload, error) {
 
 	if err := r.ParseForm(); err != nil {
 		log.Errorf("Unable to bind registration payload: %s", err)
@@ -374,7 +366,7 @@ func bindToRegistrationPayload(r *http.Request) (*oxipay.OxipayRegistrationPaylo
 	merchantID := r.Form.Get("MerchantID")
 	FxlDeviceID := deviceToken + "-" + uniqueID
 
-	register := &oxipay.OxipayRegistrationPayload{
+	register := &oxipay.RegistrationPayload{
 		MerchantID:      merchantID,
 		DeviceID:        FxlDeviceID,
 		DeviceToken:     deviceToken,
@@ -398,7 +390,7 @@ func logRequest(r *http.Request) {
 	// }
 	if r.RequestURI != "" {
 		query := r.RequestURI
-		log.Println(colour.GDarkGray("Query " + query))
+		log.Debugf("Query  %s", query)
 	}
 
 }
@@ -435,7 +427,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// we just want to ensure there is a terminal available
-	_, err = terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
+	_, err = term.GetRegister(vReq.Origin, vReq.RegisterID)
 
 	// register the device if needed
 	if err != nil {
@@ -460,11 +452,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 }
 
 func saveToSession(w http.ResponseWriter, r *http.Request, vReq *vend.PaymentRequest) {
-	// we don't have a valid terminal
-	// save the initial request vars in the session
-	// and then redirect to the register their terminal
-	//session.Values["registerId"] = vReq.registerID
-	//session.Values["origin"] = vReq.origin
+
 	session, err := getSession(r, "oxipay")
 	if err != nil {
 		log.Error(err)
@@ -501,15 +489,20 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 // RefundHandler handles performing a refund
 func RefundHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
+	cxFields := logrus.Fields{
+		"module": "proxy",
+		"call":   "RefundHandler",
+	}
+	cxLog := log.WithFields(cxFields)
 
+	// create the default response so that we always have something to send to the browser
 	browserResponse := new(Response)
 	var err error
 
-	// vReq, err = bindToRefundPayload(r)
 	x, err := getPaymentRequestFromSession(r)
-
 	if err != nil {
-		log.Error(err)
+		cxLog.Error("Unable to get the Refund Request from the session")
+		cxLog.Error(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
 		return
 	}
@@ -522,18 +515,22 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 		RegisterID:     x.RegisterID,
 		AmountFloat:    x.AmountFloat,
 	}
+	cxFields["register_id"] = x.RegisterID
+	cxFields["origin"] = x.Origin
 
 	terminal := terminal.NewTerminal(db)
 
 	register, err := terminal.GetRegister(vReq.Origin, vReq.RegisterID)
 	if err != nil {
+		cxLog.Info("Register Not Found, redirecting to /register")
 		// redirect to registration page
 		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
+	cxFields["merchant_id"] = register.FxlSellerID
 
 	txnRef, err := shortid.Generate()
-	var oxipayPayload = &oxipay.OxipaySalesAdjustmentPayload{
+	var oxipayPayload = &oxipay.SalesAdjustmentPayload{
 		Amount:            strings.Replace(vReq.Amount, "-", "", 1),
 		MerchantID:        register.FxlSellerID,
 		DeviceID:          register.FxlRegisterID,
@@ -545,25 +542,24 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 
 	// generate the plaintext for the signature
 	plainText := oxipay.GeneratePlainTextSignature(oxipayPayload)
-	log.Debugf("Oxipay plain text: %s \n", plainText)
+	log.Infof("Oxipay plain text: %s \n", plainText)
 
 	// sign the message
-	oxipayPayload.Signature = oxipay.SignMessage(plainText, terminal.FxlDeviceSigningKey)
-	log.Debugf("Oxipay signature: %s \n", oxipayPayload.Signature)
+	oxipayPayload.Signature = oxipay.SignMessage(plainText, register.FxlDeviceSigningKey)
+	log.Infof("Oxipay signature: %s \n", oxipayPayload.Signature)
 
 	// send authorisation to oxipay
 	oxipayResponse, err := oxipayClient.ProcessSalesAdjustment(oxipayPayload)
 
 	if err != nil {
 		// log the raw response
-		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
-		log.Printf(msg)
+		log.Errorf("Error Processing: %s", oxipayResponse)
 		return
 	}
 
 	// ensure the response has come from Oxipay
 	var validSignature bool
-	validSignature, err = oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey)
+	validSignature, err = oxipayResponse.Authenticate(register.FxlDeviceSigningKey)
 
 	if !validSignature || err != nil {
 		browserResponse.Message = "The signature does not match the expected signature"
@@ -597,7 +593,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	// so that we can issue this against Oxipay
 	// if the seller has correctly configured the gateway they will not hit this
 	// directly but it's here as safeguard
-	terminal, err := terminal.GetRegisteredTerminal(vReq.Origin, vReq.RegisterID)
+	terminal, err := term.GetRegister(vReq.Origin, vReq.RegisterID)
 	if err != nil {
 		// redirect
 		http.Redirect(w, r, "/register", http.StatusFound)
@@ -607,7 +603,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	// send off to Oxipay
 	//var oxipayPayload
-	var oxipayPayload = &oxipay.OxipayPayload{
+	var oxipayPayload = &oxipay.AuthorisationPayload{
 		DeviceID:          terminal.FxlRegisterID,
 		MerchantID:        terminal.FxlSellerID,
 		PosTransactionRef: vReq.SaleID,
@@ -672,7 +668,7 @@ func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 		return
 	}
 
-	log.Debug("Response: %s \n", responseJSON)
+	log.Debugf("Sending Response: %s \n to the browser \n", responseJSON)
 
 	if response.HTTPStatus == 0 {
 		response.HTTPStatus = http.StatusInternalServerError
