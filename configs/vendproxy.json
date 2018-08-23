@@ -17,7 +17,7 @@
         "httponly": true,
         "secret": "secretkey"
     },
-    "log_level": "warn",
+    "log_level": "debug",
     "background": true,
     "oxipay": {
         "gateway_url": "https://sandboxpos.oxipay.com.au/webapi/v1/"
