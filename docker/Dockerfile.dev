@@ -1,6 +1,10 @@
-FROM golang:1.10
+FROM ubuntu:latest as vend-build
+
+# add in golang ppa
+RUN add-apt-repository ppa:gophers/archive
 COPY . /go/src/github.com/oxipay/oxipay-vend
-WORKDIR /go/src/github.com/oxipay/oxipay-vend/CMD
+WORKDIR /go/src/github.com/oxipay/oxipay-vend/cmd
+RUN
 RUN CGO_ENABLED=0 go build vendproxy.go
 
 FROM alpine:3.7
