@@ -1,4 +1,13 @@
 package: github.com/oxipay/oxipay-vend
+homepage: http://docs.oxipay.com.au
+license: MIT
+owners:
+- name: Oxipay PIT
+  email: pit@oxipay.com.au
+ignore:
+- appengine
+excludeDirs:
+- node_modules
 import:
 - package: github.com/go-sql-driver/mysql
 - package: github.com/gorilla/sessions
