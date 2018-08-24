@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	micro "github.com/micro/go-config"
+	"github.com/micro/go-config/source/env"
 	"github.com/micro/go-config/source/file"
 )
 
@@ -39,12 +40,12 @@ type HostConfig struct {
 	Session    SessionConfig   `json:"session"`
 	Oxipay     OxipayConfig    `json:"oxipay"`
 	Background bool            `json:"background"`
-	LogLevel   string          `json:"log_level"`
+	LogLevel   string          `json:"loglevel"`
 }
 
 // OxipayConfig data structure that represents a valid Oxipay configuration file entry
 type OxipayConfig struct {
-	GatewayURL string `json:"gateway_url"`
+	GatewayURL string `json:"gatewayurl"`
 	Version    string
 }
 
@@ -53,11 +54,11 @@ func ReadApplicationConfig(configFile string) (HostConfig, error) {
 
 	conf := micro.NewConfig()
 	// Load json file with encoder
-	// @todo test environment override
 	err := conf.Load(
 		file.NewSource(file.WithPath(configFile)),
-		//		env.NewSource(),
-		//		flag.NewSource(),
+		// allow env overrides,
+		// keys can't have _ as this is how it deals with nesting
+		env.NewSource(),
 	)
 	var hostConfiguration HostConfig
 
