@@ -1,13 +1,35 @@
-FROM ubuntu:latest as vend-build
+FROM ubuntu:latest as build-environment
 
-# add in golang ppa
-RUN add-apt-repository ppa:gophers/archive
-COPY . /go/src/github.com/oxipay/oxipay-vend
-WORKDIR /go/src/github.com/oxipay/oxipay-vend/cmd
-RUN
-RUN CGO_ENABLED=0 go build vendproxy.go
+ENV CGO_ENABLED 0 
 
-FROM alpine:3.7
-RUN apk add --no-cache ca-certificates
-COPY --from=0 /go/src/bitbucket.code.company-name.com.au/scm/code/main .
-CMD ["./main"]
+ENV BUILD_HOME_DIR /root
+
+# install the OS build dependencies
+RUN apt-get update && apt-get install -y golang-glide golang git
+
+# Grab the oxipay vend proxy
+RUN go get -d github.com/oxipay/oxipay-vend/cmd
+ 
+WORKDIR ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/
+RUN pwd
+RUN go build ./cmd/vendproxy.go
+
+
+FROM ubuntu:latest
+
+ENV USER "vendproxy"
+ENV HOME_DIR "/srv/www/" 
+ENV BUILD_HOME_DIR "/root"
+
+RUN useradd -d ${HOME_DIR} -ms /bin/bash ${USER}
+USER ${USER}
+
+RUN mkdir ${HOME_DIR}/bin
+# https://vsupalov.com/docker-env-vars/
+#COPY --from=build-environment "${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/vendproxy" "${HOME_DIR}/bin/vendproxy"
+
+#COPY --from=build-environment ${HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/assets {HOME_DIR}/assets
+
+#COPY --from=build-environment ${HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/configs/ /etc/vendproxy/
+
+CMD ["/bin/bash"]
