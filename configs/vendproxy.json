@@ -15,12 +15,12 @@
 		"path":     "/",
 		"maxage":   3600,
         "httponly": true,
-        "secret": "secretkey"
+        "secret": "SxXcr8n9xFzsfUowQsyMUaou"
     },
-    "log_level": "debug",
+    "loglevel": "debug",
     "background": true,
     "oxipay": {
-        "gateway_url": "https://sandboxpos.oxipay.com.au/webapi/v1/"
+        "gatewayurl": "https://sandboxpos.oxipay.com.au/webapi/v1/"
 
     }
 }
