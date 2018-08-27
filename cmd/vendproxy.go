@@ -13,7 +13,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
@@ -136,7 +135,7 @@ func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstor
 	// @todo support multiple keys from the config so that key rotation is possible
 	store, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte(sessionConfig.Secret))
 	if err != nil {
-		log.Fatal(err)
+		log.Warn(err)
 	}
 
 	store.Options = &sessions.Options{
@@ -155,7 +154,13 @@ func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstor
 
 func connectToDatabase(params config.DbConnection) *sql.DB {
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true&loc=Local", params.Username, params.Password, params.Host, params.Name)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true&loc=Local&timeout=%s",
+		params.Username,
+		params.Password,
+		params.Host,
+		params.Name,
+		params.Timeout,
+	)
 
 	log.Infof("Attempting to connect to database %s \n", dsn)
 
@@ -172,9 +177,9 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 	// test to make sure it's all good
 	if err := db.Ping(); err != nil {
 		log.Errorf("Unable to connect to database: %s on %s", params.Name, params.Host)
-		log.Fatal(err)
+		log.Warn(err)
 	}
-	db.SetConnMaxLifetime(time.Duration(params.Timeout))
+	// db.SetConnMaxLifetime(time.Duration(params.Timeout))
 	//log.Print("Db Connection Timeout set to : %", db.MaxLifetime)
 	return db
 }

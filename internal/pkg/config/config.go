@@ -30,7 +30,7 @@ type DbConnection struct {
 	Password string `json:"password"`
 	Host     string `json:"host"`
 	Name     string `json:"name"`
-	Timeout  int    `json:"timeout"`
+	Timeout  string `json:"timeout"`
 }
 
 // HostConfig data structure that represent a valid configuration file
