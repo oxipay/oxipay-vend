@@ -20,20 +20,21 @@ RUN go build ./cmd/vendproxy.go
 FROM ubuntu:latest
 
 ARG USER="vendproxy"
-ARG HOME_DIR="/srv/www/" 
+ARG BASE_DIR="/srv/www"
+ARG HOME_DIR="${BASE_DIR}/${USER}" 
 ARG BUILD_HOME_DIR="/root"
 
-RUN useradd -d ${HOME_DIR} -ms /bin/bash ${USER}
+RUN mkdir -p ${BASE_DIR}
+RUN useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
 USER ${USER}
 
 RUN mkdir "${HOME_DIR}/bin"
 # https://vsupalov.com/docker-env-vars/
 
-RUN echo "HERE ${HOME_DIR}"
-COPY --from=build-environment "${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/vendproxy" "${HOME_DIR}/bin/vendproxy"
+COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/vendproxy ${HOME_DIR}/bin/vendproxy
 
-COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/assets "${HOME_DIR}/assets"
+COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/assets ${HOME_DIR}/assets
 
 COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/configs/ /etc/vendproxy/
-
-CMD ["/bin/bash"]
+WORKDIR "${HOME_DIR}"
+CMD ["./bin/vendproxy"]

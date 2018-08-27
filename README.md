@@ -29,6 +29,27 @@ In order to change this behaviour to make development more convenient set the en
 
 ```$ cd cmd; go build ./vendproxy.go ```
 
+### Docker Build
+
+* Assumes you have the AWS-CLI installed and configured
+* Assumes you have docker-compose installed
+
+
+#### Get the login command for docker to register with ECS
+``` $(aws ecr get-login --no-include-email --region <ecs region>) ```
+
+* Execute the returned command (as long as it looks sane)
+
+#### Build
+
+```
+    $ cd docker
+    $ docker-compose build
+    $ docker-compose push
+
+```
+
+
 ## Executing
 
 ```$ ./vendproxy ```
@@ -45,18 +66,16 @@ $:~/go/src/github.com/vend/peg/cmd$ ./vendproxy
 
 #### Configuration
 
-Ensure that the following settings are changed in your production configuration
+Ensure that the following settings are changed in your production configuration or in a vendproxy.env file if deploying using docker.
 
 * database.username
 * database.password
 * session.secret (used to encrypt session info)
-* oxipay.gateway_url (should be set to the prod end point)
+* oxipay.gatewayurl (should be set to the prod end point)
 
 
 
 ### Deployment
-
-#### Docker
 
 ## Licenses
 - [MIT License](https://github.com/vend/peg/blob/master/LICENSE)
