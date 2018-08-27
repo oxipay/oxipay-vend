@@ -1,0 +1,13 @@
+FROM ubuntu:latest
+
+ARG USER="vendproxy"
+ARG BASE_DIR="/srv/www"
+ARG HOME_DIR="${BASE_DIR}/${USER}"
+
+RUN apt-get update && apt-get -y install nginx
+COPY ./config/nginx/conf.d/site-config.conf /etc/nginx/conf.d/${USER}.conf
+RUN useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
+
+#VOLUME /home/am/projects/phalcontest /srv/www/mwm
+EXPOSE 80 443
+CMD ["nginx", "-g", "daemon off;"]

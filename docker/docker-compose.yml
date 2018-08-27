@@ -4,31 +4,40 @@ services:
     image: mariadb
     env_file:
       - ./mariadb.env
-    ports: 
+    ports:
      - 3306
     healthcheck:
-      test: ["CMD","mysqladmin", "ping", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
-      interval: 1m30s
-      timeout: 10s
-      retries: 3
-      start_period: 1s
-    volumes: 
+      test: ["CMD-SHELL","mysqladmin", "ping", "-u", "vendproxy", "-pJgvUH3zc3BRIAZ8"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
       - vend-data:/var/lib/mysql
   vendproxy:
-    build: 
+    build:
       context: ./
       dockerfile: Dockerfile
+      target: vendproxy
       labels:
         au.com.oxipay.vend.description: "Vend Application Proxy for Oxipay"
         au.com.oxipay.vend.publisher: "FlexiGroup"
+    env_file: 
+      - ./vendproxy.env
     image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/oxipay-vend:latest
-    env_file:
-      - ./vendproxy.env    
-    ports: 
-     - 5000
-    
-
     depends_on:
       - db
+    ports:
+      - 5000
+  nginx:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: nginx
+    image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/nginx-vend:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - vendproxy
 volumes:
-    vend-data: 
+    vend-data:

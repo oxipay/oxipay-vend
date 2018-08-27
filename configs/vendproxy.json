@@ -8,7 +8,7 @@
 		"password": "",
 		"host":     "",
 		"name":     "vend",
-		"timeout":  "30s"
+		"timeout":  "20s"
     }, 
     "session": {
         "domain":   "", 
