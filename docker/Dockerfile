@@ -7,7 +7,7 @@ ARG BUILD_HOME_DIR="/root"
 ARG PKG_BASE="${BUILD_HOME_DIR}/go/src/github.com/oxipay/"
 
 # install the OS build dependencies
-RUN apt-get update && apt-get install -y golang-glide golang git npm && apt-get clean 
+RUN apt-get update && apt-get install -y golang-glide golang git && apt-get clean 
 
 # Grab the oxipay vend proxy
 RUN mkdir -p ${PKG_BASE}
@@ -17,7 +17,7 @@ RUN git clone https://github.com/oxipay/oxipay-vend.git
 
 WORKDIR ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/
 RUN glide up && go build ./cmd/vendproxy.go
-RUN npm up
+
 
 
 ### PROD
