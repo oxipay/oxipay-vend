@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
@@ -72,6 +74,9 @@ func main() {
 
 	// load config
 	appConfig, err := config.ReadApplicationConfig(configurationFile)
+	if err != nil {
+		logrus.Fatal(err)
+	}
 
 	// init our logging framework
 	level, err := logrus.ParseLevel(appConfig.LogLevel)
@@ -145,8 +150,6 @@ func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstor
 		HttpOnly: sessionConfig.HTTPOnly, // disable for this demo
 	}
 
-	//SessionStore = sessions.NewFilesystemStore("", []byte(secureSessionKey))
-
 	// register the type VendPaymentRequest so that we can use it later in the session
 	gob.Register(&vend.PaymentRequest{})
 	return store
@@ -162,7 +165,7 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 		params.Timeout,
 	)
 
-	log.Infof("Attempting to connect to database %s \n", dsn)
+	log.Infof("Attempting to connect to database %s\n", dsn)
 
 	// connect to the database
 	// @todo grab config
@@ -174,14 +177,37 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 		log.Fatal(err)
 	}
 
+	err = retry(30, time.Duration(10), db.Ping)
+
 	// test to make sure it's all good
-	if err := db.Ping(); err != nil {
+	if err != nil {
 		log.Errorf("Unable to connect to database: %s on %s", params.Name, params.Host)
 		log.Warn(err)
 	}
-	// db.SetConnMaxLifetime(time.Duration(params.Timeout))
-	//log.Print("Db Connection Timeout set to : %", db.MaxLifetime)
+
+	log.Info("Database Connected")
+
 	return db
+}
+
+func retry(attempts int, sleep time.Duration, f func() error) error {
+	log.Info("Attempting DB connection")
+	if err := f(); err != nil {
+		log.Warn(err)
+		if attempts--; attempts > 0 {
+
+			jitter := time.Duration(rand.Int63n(int64(sleep)))
+			sleep = sleep + jitter/2
+
+			time.Sleep(sleep)
+
+			log.Warning("Unsuccessful Retrying")
+			return retry(attempts, 2*sleep, f)
+		}
+		return err
+	}
+
+	return nil
 }
 
 func getPaymentRequestFromSession(r *http.Request) (*vend.PaymentRequest, error) {
@@ -223,7 +249,7 @@ func getSession(r *http.Request, sessionName string) (*sessions.Session, error) 
 
 // RegisterHandler GET request. Prompt for the Merchant ID and Device Token
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	// logRequest(r)
+	logRequest(r)
 	browserResponse := &Response{}
 	switch r.Method {
 	case http.MethodPost:
@@ -416,7 +442,6 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	origin := r.Form.Get("origin")
 	origin, _ = url.PathUnescape(origin)
 
-	// @todo add NewPaymentRequest method
 	vReq := &vend.PaymentRequest{
 		Amount:     r.Form.Get("amount"),
 		Origin:     origin,
