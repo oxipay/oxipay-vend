@@ -611,7 +611,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	browserResponse := new(Response)
 
-	//logRequest(r)
+	logRequest(r)
 
 	vReq, err = bindToPaymentPayload(r)
 	if err != nil {

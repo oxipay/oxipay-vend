@@ -146,7 +146,6 @@ function checkResponse(response) {
     case 'ACCEPTED':
         $('#statusMessage').empty()
         var receiptHTML = '';
-        debugger;
         console.debug(response)
         
         if (typeof(response.id) != 'undefined') {
