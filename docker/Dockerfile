@@ -4,16 +4,20 @@ FROM ubuntu:latest as build-environment
 
 ENV CGO_ENABLED 0 
 ARG BUILD_HOME_DIR="/root"
+ARG PKG_BASE="${BUILD_HOME_DIR}/go/src/github.com/oxipay/"
 
 # install the OS build dependencies
-RUN apt-get update && apt-get install -y golang-glide golang git && apt-get clean
+RUN apt-get update && apt-get install -y golang-glide golang git npm && apt-get clean 
 
 # Grab the oxipay vend proxy
-RUN go get -d github.com/oxipay/oxipay-vend/cmd
- 
+RUN mkdir -p ${PKG_BASE}
+
+WORKDIR ${PKG_BASE} 
+RUN git clone https://github.com/oxipay/oxipay-vend.git
+
 WORKDIR ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/
-RUN pwd
-RUN go build ./cmd/vendproxy.go
+RUN glide up && go build ./cmd/vendproxy.go
+RUN npm up
 
 
 ### PROD
@@ -29,7 +33,6 @@ RUN useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
 USER ${USER}
 
 RUN mkdir "${HOME_DIR}/bin"
-# https://vsupalov.com/docker-env-vars/
 
 COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/vendproxy ${HOME_DIR}/bin/vendproxy
 
