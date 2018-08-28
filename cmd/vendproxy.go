@@ -12,6 +12,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -685,6 +686,13 @@ func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
+		absFile, err := filepath.Abs(response.file)
+		if err != nil {
+			log.Warnf("Unable to find file %s: %e", response.file, err)
+		} else {
+			log.Infof("Serving file : %s ", absFile)
+		}
+
 		http.ServeFile(w, r, response.file)
 
 		return
