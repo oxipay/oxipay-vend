@@ -79,7 +79,7 @@ func (t Terminal) Save(user string, register *Register) (bool, error) {
 
 // GetRegister will return a registered terminal for the the domain & vendregister_id combo
 func (t Terminal) GetRegister(originDomain string, vendRegisterID string) (*Register, error) {
-
+	var register = new(Register)
 	sql := `SELECT 
 			 fxl_register_id, 
 			 fxl_seller_id,
@@ -95,8 +95,10 @@ func (t Terminal) GetRegister(originDomain string, vendRegisterID string) (*Regi
 			AND 1=1`
 
 	rows, err := t.Db.Query(sql, originDomain, vendRegisterID)
+	if rows == nil {
+		return register, errors.New("Nothing returned from register lookup. Has the table been created ?")
+	}
 
-	var register = new(Register)
 	noRows := 0
 
 	for rows.Next() {
