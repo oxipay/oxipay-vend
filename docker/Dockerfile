@@ -7,7 +7,9 @@ ARG BUILD_HOME_DIR="/root"
 ARG PKG_BASE="${BUILD_HOME_DIR}/go/src/github.com/oxipay/"
 
 # install the OS build dependencies
-RUN apt-get update && apt-get install -y golang-glide golang git && apt-get clean 
+# ca-certificates is required to resolve https connections to Oxipay
+# golang-glide is a go dependency manager
+RUN apt-get update && apt-get install -y ca-certificates golang-glide golang git && apt-get clean 
 
 # Grab the oxipay vend proxy
 RUN mkdir -p ${PKG_BASE}
@@ -30,7 +32,7 @@ ARG BUILD_HOME_DIR="/root"
 
 RUN mkdir -p ${BASE_DIR}
 RUN useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
-USER ${USER}
+
 
 RUN mkdir "${HOME_DIR}/bin"
 
@@ -40,7 +42,10 @@ COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-
 
 COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/configs/ /etc/vendproxy/
 WORKDIR "${HOME_DIR}"
-CMD ["./bin/vendproxy"]
+RUN chown -R ${USER}:${USER} ${HOME_DIR}
+WORKDIR "${HOME_DIR}/bin"
+USER ${USER}
+CMD ["./vendproxy"]
 
 
 ### PROD NGINX
