@@ -9,7 +9,7 @@ ARG PKG_BASE="${BUILD_HOME_DIR}/go/src/github.com/oxipay/"
 # install the OS build dependencies
 # ca-certificates is required to resolve https connections to Oxipay
 # golang-glide is a go dependency manager
-RUN apt-get update && apt-get install -y ca-certificates golang-glide golang git && apt-get clean 
+RUN apt-get update && apt-get install -y ssl-cert ca-certificates golang-glide golang git && apt-get clean 
 
 # Grab the oxipay vend proxy
 RUN mkdir -p ${PKG_BASE}
@@ -32,7 +32,7 @@ ARG BUILD_HOME_DIR="/root"
 
 RUN mkdir -p ${BASE_DIR}
 RUN useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
-
+RUN apt-get update && apt-get install -y ssl-cert ca-certificates && apt-get clean
 
 RUN mkdir "${HOME_DIR}/bin"
 
