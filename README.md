@@ -62,6 +62,39 @@ $:~/go/src/github.com/vend/peg/cmd$ ./vendproxy
 ```
 
 
+### Docker
+
+A development ```docker-compose.yml``` is provided which will allow a local setup of the proxy. You will need to provide the following environment files
+
+* maridb.env
+
+```
+MYSQL_ROOT_PASSWORD=<root_password>
+MYSQL_USER=vendproxy
+MYSQL_PASSWORD=<vendproxy_db_password>
+MYSQL_DATABASE=vend
+```
+
+* vendproxy.env
+
+** Note these are intentionally lowercase
+
+```
+database_username=vendproxy
+database_password=<vendproxy_db_password>
+database_host=database-vend
+session_secret=<session_secret>
+oxipay_gatewayurl=https://sandboxpos.oxipay.com.au/webapi/v1/
+
+
+#### Database
+
+Ensure that the database and database tables that are required are executed against the environment 
+
+``` mysql -u root -p<rootpw> -h <host> vend < ./scripts/init.sql ```
+
+This will likely change in the near future to use a sqitch.org plan / container 
+
 ### Production Setup 
 
 #### Configuration
@@ -75,7 +108,8 @@ Ensure that the following settings are changed in your production configuration 
 
 
 
-### Deployment
+### Deployment with Docker
+
 
 ## Licenses
 - [MIT License](https://github.com/vend/peg/blob/master/LICENSE)
