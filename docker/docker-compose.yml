@@ -32,10 +32,23 @@ services:
       target: nginx
     image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/nginx-vend:latest
     container_name: "nginx-vend"
+    # @todo move to env file
+    environment:
+        SSL_CRT: /run/secrets/wildcard.oxipay.com.au.crt
+        SSL_KEY: /run/secrets/wildcard.oxipay.com.au.key
     ports:
       - "80:80"
       - "443:443"
+    secrets: 
+        - wildcard.oxipay.com.au.crt
+        - wildcard.oxipay.com.au.key
     depends_on:
       - vendproxy
 volumes:
     vend-data:
+    
+secrets:
+    wildcard.oxipay.com.au.crt:
+        file: ./ssl/certs/wildcard.oxipay.com.au.crt
+    wildcard.oxipay.com.au.key:
+        file: ./ssl/private/wildcard.oxipay.com.au.key
