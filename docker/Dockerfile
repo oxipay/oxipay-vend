@@ -36,15 +36,16 @@ RUN apt-get update && apt-get install -y ssl-cert ca-certificates && apt-get cle
 
 RUN mkdir "${HOME_DIR}/bin"
 
-COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/vendproxy ${HOME_DIR}/bin/vendproxy
-
-COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/assets ${HOME_DIR}/assets
-
 COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/configs/ /etc/vendproxy/
 WORKDIR "${HOME_DIR}"
-RUN chown -R ${USER}:${USER} ${HOME_DIR}
-WORKDIR "${HOME_DIR}/bin"
+
+## There is a bug https://github.com/moby/moby/issues/35018 
+## which prevents ${USER} being used in COPY --chown
+COPY --chown=vendproxy:vendproxy --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/vendproxy ${HOME_DIR}/bin/vendproxy
+
+COPY --chown=vendproxy:vendproxy --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/assets ${HOME_DIR}/assets
 USER ${USER}
+WORKDIR ${HOME_DIR}/bin
 CMD ["./vendproxy"]
 
 
@@ -56,17 +57,21 @@ ARG BASE_DIR="/srv/www"
 ARG HOME_DIR="${BASE_DIR}/${USER}"
 ARG BUILD_HOME_DIR="/root"
 
+ENV DOLLAR=$
 ENV HTTP_PORT=80
 ENV TLS_PORT=443
 ENV SITE_URL="vend.oxipay.com.au"
 ENV SITE_HOME="${HOME_DIR}"
 ENV PROXY_TO="http://vendproxy:5000"
 
+
 RUN apt-get update && apt-get install -y nginx gettext-base && apt-get clean
 COPY ./nginx/config/nginx/conf.d/site-config.conf /etc/nginx/sites-available/default.conf
-COPY --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/assets ${HOME_DIR}/assets
 COPY nginx-start.sh /usr/local/bin/nginx-start.sh
-RUN useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
+
+RUN mkdir ${BASE_DIR} && useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
+
+COPY --chown=vendproxy:www-data --from=build-environment ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/assets ${HOME_DIR}/assets
 
 EXPOSE ${HTTP_PORT} ${TLS_PORT}
 CMD ["/usr/local/bin/nginx-start.sh"]
