@@ -28,3 +28,4 @@ vendor/*
 
 vendproxy
 debug
+docker/ssl/*
