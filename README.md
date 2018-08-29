@@ -86,6 +86,21 @@ database_host=database-vend
 session_secret=<session_secret>
 oxipay_gatewayurl=https://sandboxpos.oxipay.com.au/webapi/v1/
 
+```
+
+* TLS Certificates
+
+You will need to create a directory structure similar to ```/etc/ssl```. 
+
+```
+$ cd docker
+$ mkdir -p ./ssl/certs && mkdir ./ssl/private
+$ cp my.crt ./ssl/certs
+$ cp my.key ./ssl/private
+````
+
+Your docker/docker-compose.yml will also need to be updated to reference these files. @todo .env file
+
 
 #### Database
 
