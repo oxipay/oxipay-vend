@@ -60,9 +60,10 @@ ARG BUILD_HOME_DIR="/root"
 ENV DOLLAR=$
 ENV HTTP_PORT=80
 ENV TLS_PORT=443
-ENV SITE_URL="vend.oxipay.com.au"
 ENV SITE_HOME="${HOME_DIR}"
-ENV PROXY_TO="http://vendproxy:5000"
+
+ENV SITE_URL=''
+ENV PROXY_TO=''
 
 
 RUN apt-get update && apt-get install -y nginx gettext-base && apt-get clean
