@@ -66,6 +66,8 @@ function declineStep(receiptHTML) {
   })
 }
 
+  
+
 // EXIT: Cleanly exit the process. Does not close the window but closes all
 // other dialoggers including the payment modal/iFrame and unbinds postMessage
 // handling. It is better to avoid using this step, as it breaks the transaction
@@ -173,6 +175,7 @@ function checkResponse(response) {
       
       $('#statusMessage').empty()
       $.get('/assets/templates/failed.html', function (data) {
+        response.message = response.message? response.message: "" 
         data = data.replace("${response.status}", response.status.toLowerCase());
         data = data.replace("${response.message}", response.message);
         $('#statusMessage').append(data)
@@ -191,7 +194,7 @@ function checkResponse(response) {
         $('#statusMessage').append(data)
       })
 
-      setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
+      setTimeout(declineStep, 4000,'<div>TIMEOUT</div>')
       break
     default:
       $('#statusMessage').empty()
@@ -449,7 +452,7 @@ function cancelPayment(outcome) {
 
   // Wait four seconds, then quit window, giving the cashier a chance to try
   // again.
-  setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
+  setTimeout(declineStep, 4000 )
 }
 
 function showClose() {
