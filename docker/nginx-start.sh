@@ -1,4 +1,4 @@
 #!/bin/bash
-/usr/local/bin/gotemplate  -f /etc/nginx/sites-available/default > /etc/nginx/sites-enabled/default 
-
+## remove the default template 
+/usr/local/bin/gotemplate -f /usr/local/etc/site-config.conf -o /etc/nginx/sites-enabled/default 
 nginx -g "daemon off;"
