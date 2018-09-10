@@ -66,8 +66,10 @@ ENV SITE_URL=''
 ENV PROXY_TO=''
 
 
-RUN apt-get update && apt-get install -y nginx gettext-base && apt-get clean
-COPY ./nginx/config/nginx/conf.d/site-config.conf /etc/nginx/sites-available/default.conf
+RUN apt-get update && apt-get install -y nginx wget && apt-get clean
+RUN wget https://github.com/hairyhenderson/gomplate/releases/download/2.8.0/gomplate_linux-amd64 -O /usr/local/bin/gotemplate && chmod +x /usr/local/bin/gotemplate
+
+COPY ./nginx/config/nginx/conf.d/site-config.conf /etc/nginx/sites-available/default
 COPY nginx-start.sh /usr/local/bin/nginx-start.sh
 
 RUN mkdir ${BASE_DIR} && useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
