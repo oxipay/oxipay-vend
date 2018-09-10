@@ -41,7 +41,7 @@ services:
     depends_on:
       - db
     ports:
-      - 5001
+      - 5000
   nginx:
     build:
       context: ./
@@ -54,7 +54,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    command: /bin/bash
+    # entrypoint: ['/bin/sh']
+    # tty: true
+    # stdin_open: true
     secrets: 
       - wildcard.oxipay.com.au.key
       - wildcard.oxipay.com.au.crt
@@ -63,6 +65,8 @@ services:
     depends_on:
       - vendproxy_au
       - vendproxy_nz
+    
+
 volumes:
     vend-data:
 
