@@ -9,7 +9,7 @@ services:
      - 3306
     volumes:
       - vend-data:/var/lib/mysql
-  au_vendproxy:
+  vendproxy_au:
     build:
       context: ./
       dockerfile: Dockerfile
@@ -18,15 +18,15 @@ services:
         au.com.oxipay.vend.description: "Vend Application Proxy for Oxipay AU"
         au.com.oxipay.vend.publisher: "FlexiGroup"
     env_file: 
-      - ./au_vendproxy.env
+      - ./vendproxy_au.env
     image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/oxipay-vend:latest
-    container_name: "au-proxy-vend"
+    container_name: "proxy-vend-au"
     depends_on:
       - db
     ports:
       - 5000
 
-  nz_vendproxy:
+  vendproxy_nz:
     build:
       context: ./
       dockerfile: Dockerfile
@@ -35,14 +35,13 @@ services:
         au.com.oxipay.vend.description: "Vend Application Proxy for Oxipay NZ"
         au.com.oxipay.vend.publisher: "FlexiGroup"
     env_file: 
-      - ./nz_vendproxy.env
+      - ./vendproxy_nz.env
     image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/oxipay-vend:latest
-    container_name: "nz-proxy-vend"
+    container_name: "proxy-vend-nz"
     depends_on:
       - db
     ports:
       - 5001
-
   nginx:
     build:
       context: ./
@@ -62,7 +61,8 @@ services:
       - wildcard.oxipay.co.nz.key
       - wildcard.oxipay.co.nz.crt
     depends_on:
-      - au_vendproxy
+      - vendproxy_au
+      - vendproxy_nz
 volumes:
     vend-data:
 
