@@ -41,7 +41,7 @@ services:
     depends_on:
       - db
     ports:
-      - 5000
+      - 5001
   nginx:
     build:
       context: ./
@@ -65,7 +65,6 @@ services:
     depends_on:
       - vendproxy_au
       - vendproxy_nz
-    
 
 volumes:
     vend-data:
