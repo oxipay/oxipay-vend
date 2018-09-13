@@ -1,0 +1,6 @@
+%syntax-version=1.0.0
+%project=vendproxy
+
+create_db 2018-09-13T00:11:53Z andrew <am@arlington> # create database
+oxipay_vend_map 2018-09-13T00:12:46Z andrew <am@arlington> # create the table to map the vend registers to oxipay
+sessions 2018-09-13T00:13:25Z andrew <am@arlington> # create the sessions table
