@@ -449,7 +449,7 @@ function cancelPayment(outcome) {
 
   // Wait four seconds, then quit window, giving the cashier a chance to try
   // again.
-  setTimeout(declineStep, 4000, '<div>CANCELLED</div>')
+  setTimeout(declineStep, 4000)
 }
 
 function showClose() {
