@@ -113,7 +113,7 @@ func main() {
 	http.HandleFunc("/refund", RefundHandler)
 
 	// The default port is 500, but one can be specified as an env var if needed.
-	port := strconv.FormatInt(int64(appConfig.Webserver.Port), 10)
+	port := appConfig.Webserver.Port
 
 	log.Infof("Starting webserver on port %s \n", port)
 
@@ -659,6 +659,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "There was a problem processing the request", http.StatusInternalServerError)
 		// log the raw response
+
 		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
 		log.Error(msg)
 		return

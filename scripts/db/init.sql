@@ -23,21 +23,21 @@ ON oxipay_vend_map (vend_register_id, fxl_seller_id, origin_domain);
 
 -- insert test records
 
-INSERT INTO oxipay_vend_map (
-    fxl_register_id,
-    fxl_seller_id,
-    fxl_device_signing_key, 
-    origin_domain,
-    vend_register_id,
-    created_by
-) VALUES (
-    'Oxipos',
-    '30188105',
-    'JCjbPGtuniWr',
-    'https://sandbox.oxipay.com.au',
-    '57d863b4-4ae0-492c-b44a-326db76f7dac',
-    'andrewm'
-);
+-- INSERT INTO oxipay_vend_map (
+--     fxl_register_id,
+--     fxl_seller_id,
+--     fxl_device_signing_key, 
+--     origin_domain,
+--     vend_register_id,
+--     created_by
+-- ) VALUES (
+--     'Oxipos',
+--     '30188105',
+--     'JCjbPGtuniWr',
+--     'https://sandbox.oxipay.com.au',
+--     '57d863b4-4ae0-492c-b44a-326db76f7dac',
+--     'andrewm'
+-- );
 
 DROP TABLE IF EXISTS `sessions`; 
 CREATE TABLE sessions (

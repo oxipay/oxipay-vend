@@ -75,7 +75,7 @@ MYSQL_PASSWORD=<vendproxy_db_password>
 MYSQL_DATABASE=vend
 ```
 
-* vendproxy.env
+* vendproxy_au.env
 
 ** Note these are intentionally lowercase
 
@@ -86,6 +86,26 @@ database_host=database-vend
 session_secret=<session_secret>
 oxipay_gatewayurl=https://sandboxpos.oxipay.com.au/webapi/v1/
 
+```
+
+* nginx.env
+
+```
+HTTP_PORT=80
+TLS_PORT=443
+
+AU_SITE_URL=vend.oxipay.com.au
+AU_SITE_HOME=/srv/www/vendproxy
+AU_SSL_CRT=/run/secrets/wildcard.oxipay.com.au.crt
+AU_SSL_KEY=/run/secrets/wildcard.oxipay.com.au.key
+AU_PROXY_TO=http://vendproxy_au:5000
+
+
+NZ_SITE_URL=vend.oxipay.co.nz
+NZ_SITE_HOME=/srv/www/vendproxy
+NZ_SSL_CRT=/run/secrets/wildcard.oxipay.co.nz.crt
+NZ_SSL_KEY=/run/secrets/wildcard.oxipay.co.nz.key
+NZ_PROXY_TO=http://vendproxy_nz:5000
 ```
 
 * TLS Certificates

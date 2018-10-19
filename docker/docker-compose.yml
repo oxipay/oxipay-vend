@@ -9,22 +9,39 @@ services:
      - 3306
     volumes:
       - vend-data:/var/lib/mysql
-  vendproxy:
+  vendproxy_au:
     build:
       context: ./
       dockerfile: Dockerfile
       target: vendproxy
       labels:
-        au.com.oxipay.vend.description: "Vend Application Proxy for Oxipay"
+        au.com.oxipay.vend.description: "Vend Application Proxy for Oxipay AU"
         au.com.oxipay.vend.publisher: "FlexiGroup"
     env_file: 
-      - ./vendproxy.env
+      - ./vendproxy_au.env
     image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/oxipay-vend:latest
-    container_name: "proxy-vend"
+    container_name: "proxy-vend-au"
     depends_on:
       - db
     ports:
-      - 5000:5000
+      - 5000
+
+  vendproxy_nz:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: vendproxy
+      labels:
+        au.com.oxipay.vend.description: "Vend Application Proxy for Oxipay NZ"
+        au.com.oxipay.vend.publisher: "FlexiGroup"
+    env_file: 
+      - ./vendproxy_nz.env
+    image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/oxipay-vend:latest
+    container_name: "proxy-vend-nz"
+    depends_on:
+      - db
+    ports:
+      - 5001
   nginx:
     build:
       context: ./
@@ -32,23 +49,33 @@ services:
       target: nginx
     image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/nginx-vend:latest
     container_name: "nginx-vend"
-    # @todo move to env file
-    environment:
-        SSL_CRT: /run/secrets/wildcard.oxipay.com.au.crt
-        SSL_KEY: /run/secrets/wildcard.oxipay.com.au.key
+    env_file: 
+      - ./nginx.env            
     ports:
       - "80:80"
       - "443:443"
+    # entrypoint: ['/bin/sh']
+    # tty: true
+    # stdin_open: true
     secrets: 
-        - wildcard.oxipay.com.au.crt
-        - wildcard.oxipay.com.au.key
+      - wildcard.oxipay.com.au.key
+      - wildcard.oxipay.com.au.crt
+      - wildcard.oxipay.co.nz.key
+      - wildcard.oxipay.co.nz.crt
     depends_on:
-      - vendproxy
+      - vendproxy_au
+      - vendproxy_nz
+
 volumes:
     vend-data:
-    
+
 secrets:
-    wildcard.oxipay.com.au.crt:
-        file: ./ssl/certs/wildcard.oxipay.com.au.crt
     wildcard.oxipay.com.au.key:
-        file: ./ssl/private/wildcard.oxipay.com.au.key
+      file: ./ssl/private/wildcard.oxipay.com.au.key
+    wildcard.oxipay.co.nz.key:
+      file: ./ssl/private/wildcard.oxipay.co.nz.key
+    wildcard.oxipay.com.au.crt:
+      file: ./ssl/certs/wildcard.oxipay.com.au.crt
+    wildcard.oxipay.co.nz.crt:
+      file: ./ssl/certs/wildcard.oxipay.co.nz.crt
+

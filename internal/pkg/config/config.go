@@ -10,7 +10,7 @@ import (
 
 // WebserverConfig configuration for the webserver
 type WebserverConfig struct {
-	Port    int    `json:"port"`
+	Port    string `json:"port"`
 	Address string `json:"address"`
 }
 
@@ -76,7 +76,6 @@ func ReadApplicationConfig(configFile string) (HostConfig, error) {
 	// should load from a non-config file
 	hostConfiguration.Oxipay.Version = "1.1"
 
-	// map[cache:map[address:10.0.0.2 port:6379] database:map[address:10.0.0.1 port:3306]]
 	return hostConfiguration, err
 }
 
