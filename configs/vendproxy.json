@@ -6,7 +6,7 @@
     "database": {
         "username": "",
 		"password": "",
-		"host":     "",
+		"host":     "127.0.0.1",
 		"name":     "vend",
 		"timeout":  "20s"
     }, 
@@ -20,7 +20,8 @@
     "loglevel": "debug",
     "background": true,
     "oxipay": {
-        "gatewayurl": "https://sandboxpos.oxipay.com.au/webapi/v1/"
+        "gatewayurl": "https://integration-pos.shophumm.co.nz/webapi/v1/"
+        
 
     }
 }

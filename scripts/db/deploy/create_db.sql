@@ -2,6 +2,6 @@
 
 BEGIN;
 
--- XXX Add DDLs here.
-
+CREATE DATABASE IF NOT EXISTS vend;
+-- you need to grant user access
 COMMIT;

@@ -1,0 +1,50 @@
+version: '3.7'
+services:
+  db:
+    image: mariadb
+    container_name: "database-vend"
+    environment:
+      MYSQL_ROOT_PASSWORD: 
+      MYSQL_USER: 
+      MYSQL_PASSWORD: 
+    ports:
+     - 3306:3306
+    # volumes:
+    #   - vend-data:/var/lib/mysql  
+  # nginx:
+  #   build:
+  #     context: ./
+  #     dockerfile: Dockerfile
+  #     target: nginx
+  #   image: 844996184919.dkr.ecr.ap-southeast-2.amazonaws.com/nginx-vend:latest
+  #   container_name: "nginx-vend"
+  #   env_file: 
+  #     - ./nginx.env            
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   # entrypoint: ['/bin/sh']
+  #   # tty: true
+  #   # stdin_open: true
+  #   secrets: 
+  #     - wildcard.oxipay.com.au.key
+  #     - wildcard.oxipay.com.au.crt
+  #     - wildcard.oxipay.co.nz.key
+  #     - wildcard.oxipay.co.nz.crt
+  #   # depends_on:
+  #     # - vendproxy_au
+  #     # - vendproxy_nz
+
+# volumes:
+#     vend-data:
+
+# secrets:
+#     wildcard.oxipay.com.au.key:
+#       file: ./ssl/private/wildcard.oxipay.com.au.key
+#     wildcard.oxipay.co.nz.key:
+#       file: ./ssl/private/wildcard.oxipay.co.nz.key
+#     wildcard.oxipay.com.au.crt:
+#       file: ./ssl/certs/wildcard.oxipay.com.au.crt
+#     wildcard.oxipay.co.nz.crt:
+#       file: ./ssl/certs/wildcard.oxipay.co.nz.crt
+

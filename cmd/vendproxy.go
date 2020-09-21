@@ -57,7 +57,7 @@ var DbSessionStore *mysqlstore.MySQLStore
 
 var log *logrus.Logger
 
-var appConfig *config.HostConfig
+// var appConfig *config.HostConfig
 
 var oxipayClient oxipay.Client
 

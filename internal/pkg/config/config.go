@@ -1,11 +1,7 @@
 package config
 
 import (
-	"fmt"
-
-	micro "github.com/micro/go-config"
-	"github.com/micro/go-config/source/env"
-	"github.com/micro/go-config/source/file"
+	"github.com/spf13/viper"
 )
 
 // WebserverConfig configuration for the webserver
@@ -50,27 +46,34 @@ type OxipayConfig struct {
 }
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
-func ReadApplicationConfig(configFile string) (HostConfig, error) {
+func ReadApplicationConfig(configFile string) (*HostConfig, error) {
+	conf := viper.New()
+	conf.SetConfigName("vendproxy")
+	//conf.Set("Verbose", true)
 
-	conf := micro.NewConfig()
-	// Load json file with encoder
-	err := conf.Load(
-		file.NewSource(file.WithPath(configFile)),
-		// allow env overrides,
-		// keys can't have _ as this is how it deals with nesting
-		env.NewSource(),
-	)
-	var hostConfiguration HostConfig
+	conf.AddConfigPath("/etc/vend/")
+	conf.AddConfigPath("../configs/")
+	conf.AddConfigPath("./")
+
+	conf.AutomaticEnv()
+
+	err := conf.ReadInConfig()
+
+	if err != nil {
+		return nil, err
+	}
+
+	hostConfiguration := &HostConfig{}
 
 	if err != nil {
 		return hostConfiguration, err
 	}
 
-	errs := validate(conf)
-	if len(errs) > 0 {
-		return hostConfiguration, errs[0]
-	}
-	err = conf.Scan(&hostConfiguration)
+	// errs := validate(conf)
+	// if len(errs) > 0 {
+	// 	return hostConfiguration, errs[0]
+	// }
+	err = conf.Unmarshal(hostConfiguration)
 
 	// hardcode this for now
 	// should load from a non-config file
@@ -80,21 +83,21 @@ func ReadApplicationConfig(configFile string) (HostConfig, error) {
 }
 
 // Validate ensure we have some basic validation of the configuration
-func validate(myconfig micro.Config) []error {
-	required := [3]string{"webserver", "database", "session"}
-	var errs []error
+// func validate(myconfig viper.Viper) []error {
+// 	required := [3]string{"webserver", "database", "session"}
+// 	var errs []error
 
-	// We need to do more error checking here but let's at least make an
-	// attempt
-	for _, entry := range required {
-		var tmpMap map[string]string
-		configValue := myconfig.Get(entry).StringMap(tmpMap)
-		if configValue == nil {
-			newErr := fmt.Errorf("Config is missing a definition for %s", entry)
-			errs = append(errs, newErr)
-		}
-	}
+// 	// We need to do more error checking here but let's at least make an
+// 	// attempt
+// 	for _, entry := range required {
+// 		var tmpMap map[string]string
+// 		configValue := myconfig.Get(entry).StringMap(tmpMap)
+// 		if configValue == nil {
+// 			newErr := fmt.Errorf("Config is missing a definition for %s", entry)
+// 			errs = append(errs, newErr)
+// 		}
+// 	}
 
-	// check the ensure the log level works
-	return errs
-}
+// 	// check the ensure the log level works
+// 	return errs
+// }
