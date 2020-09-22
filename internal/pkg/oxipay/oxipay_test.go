@@ -23,7 +23,7 @@ func TestProcessAuthorisationResponse(t *testing.T) {
 func TestGenerateSignature(t *testing.T) {
 
 	responsePayload := `{"x_key":"hEz3dnWwEWuo","x_status":"Success","x_code":"SCRK01","x_message":"Success","signature":"5385041e76753e1b6e7ac09d52c6363854f1df4e79a7aa01c44f2d4618063483","tracking_data":null}`
-	oxipayResponse := new(OxipayResponse)
+	oxipayResponse := new(Response)
 
 	err := json.Unmarshal([]byte(responsePayload), oxipayResponse)
 	if err != nil {
@@ -45,13 +45,15 @@ func TestGenerateSignature(t *testing.T) {
 func TestAuthenticate(t *testing.T) {
 
 	responsePayload := `{"x_key":"hEz3dnWwEWuo","x_status":"Success","x_code":"SCRK01","x_message":"Success","signature":"5385041e76753e1b6e7ac09d52c6363854f1df4e79a7aa01c44f2d4618063483","tracking_data":null}`
-	oxipayResponse := new(OxipayResponse)
+	oxipayResponse := new(Response)
 
 	err := json.Unmarshal([]byte(responsePayload), oxipayResponse)
 	if err != nil {
 		t.Error("Unable to unmarshall response")
 	}
-	if oxipayResponse.Authenticate("szUb4YwzQNXn") == false {
+	res, err := oxipayResponse.Authenticate("szUb4YwzQNXn")
+	if err != nil {
 		t.Error("Authenticate failed and should be true")
 	}
+	_ = res
 }

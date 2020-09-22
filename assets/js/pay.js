@@ -154,7 +154,7 @@ function checkResponse(response) {
             receiptHTML = `
             <div>
                 <h2>APPROVED</h2>
-                <span>Oxipay Purchase #: ` + response.id+ ` </span>
+                <span>Humm Purchase #: ` + response.id+ ` </span>
             </div>`;
         }
       

@@ -278,6 +278,7 @@ func GeneratePlainTextSignature(payload interface{}) string {
 		}
 	}
 	plainText := buffer.String()
+	log.Debug("Plaintext Signature is: %s", plainText)
 	return plainText
 }
 
@@ -297,37 +298,37 @@ func CheckMAC(message []byte, messageMAC []byte, key []byte) (bool, error) {
 // ProcessRegistrationResponse provides a function to map an Oxipay CreateKey response to something we can pass back to the client
 func ProcessRegistrationResponse() func(string) *ResponseCode {
 	innerMap := map[string]*ResponseCode{
-		"SCRK01": &ResponseCode{
+		"SCRK01": {
 			TxnStatus:       StatusApproved,
 			LogMessage:      "SUCCESS",
 			CustomerMessage: "SUCCESS",
 		},
-		"FCRK01": &ResponseCode{
+		"FCRK01": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Device token provided could not be found",
 			CustomerMessage: "Device token provided could not be found",
 		},
-		"FCRK02": &ResponseCode{
+		"FCRK02": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Device token provided has already been used",
 			CustomerMessage: "Device token provided has already been used",
 		},
-		"EVAL01": &ResponseCode{
+		"EVAL01": {
 			TxnStatus:  StatusFailed,
 			LogMessage: "Request is invalid",
-			CustomerMessage: `The request to Oxipay was invalid. 
+			CustomerMessage: `The request to Humm was invalid. 
 			You can try again with a different Payment Code. 
-			Please contact pit@oxipay.com.au for further support`,
+			Please contact pit@shophumm.com.au for further support`,
 		},
-		"ESIG01": &ResponseCode{
+		"ESIG01": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
-			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+			CustomerMessage: `Please contact pit@shophumm.com.au for further support`,
 		},
-		"EISE01": &ResponseCode{
+		"EISE01": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Server Error",
-			CustomerMessage: "Please contact pit@oxipay.com.au for further support",
+			CustomerMessage: "Please contact pit@shophumm.com.au for further support",
 		},
 	}
 
@@ -346,98 +347,98 @@ func ProcessRegistrationResponse() func(string) *ResponseCode {
 func ProcessAuthorisationResponses() func(string) *ResponseCode {
 
 	innerMap := map[string]*ResponseCode{
-		"SPRA01": &ResponseCode{
+		"SPRA01": {
 			TxnStatus:       StatusApproved,
 			LogMessage:      "APPROVED",
 			CustomerMessage: "APPROVED",
 		},
-		"FPRA01": &ResponseCode{
+		"FPRA01": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined due to internal risk assessment against the customer",
 			CustomerMessage: "Do not try again",
 		},
-		"FPRA02": &ResponseCode{
+		"FPRA02": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined due to insufficient funds for the deposit",
 			CustomerMessage: "Please call customer support",
 		},
-		"FPRA03": &ResponseCode{
+		"FPRA03": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Declined as communication to the bank is currently unavailable",
 			CustomerMessage: "Please try again shortly. Communication to the bank is unavailable",
 		},
-		"FPRA04": &ResponseCode{
+		"FPRA04": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because the customer limit has been exceeded",
-			CustomerMessage: "Please contact Oxipay customer support",
+			CustomerMessage: "Please contact Humm customer support",
 		},
-		"FPRA05": &ResponseCode{
+		"FPRA05": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined due to negative payment history for the customer",
-			CustomerMessage: "Please contact Oxipay customer support for more information",
+			CustomerMessage: "Please contact Humm customer support for more information",
 		},
-		"FPRA06": &ResponseCode{
+		"FPRA06": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because the credit-card used for the deposit is expired",
 			CustomerMessage: "Declined because the credit-card used for the deposit is expired",
 		},
-		"FPRA07": &ResponseCode{
+		"FPRA07": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because supplied POSTransactionRef has already been processed",
 			CustomerMessage: "We have seen this Transaction ID before, please try again",
 		},
-		"FPRA08": &ResponseCode{
+		"FPRA08": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because the instalment amount was below the minimum threshold",
 			CustomerMessage: "Transaction below minimum",
 		},
-		"FPRA09": &ResponseCode{
+		"FPRA09": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Declined because purchase amount exceeded pre-approved amount",
-			CustomerMessage: "Please contact Oxipay customer support",
+			CustomerMessage: "Please contact Humm customer support",
 		},
-		"FPRA21": &ResponseCode{
+		"FPRA21": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "The Payment Code was not found",
 			CustomerMessage: "This is not a valid Payment Code.",
 		},
-		"FPRA22": &ResponseCode{
+		"FPRA22": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "The Payment Code has already been used",
 			CustomerMessage: "The Payment Code has already been used",
 		},
-		"FPRA23": &ResponseCode{
+		"FPRA23": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "The Payment Code has expired",
 			CustomerMessage: "The Payment Code has expired",
 		},
-		"FPRA24": &ResponseCode{
+		"FPRA24": {
 			TxnStatus:  StatusDeclined,
 			LogMessage: "The Payment Code has been cancelled",
 			CustomerMessage: `Payment Code has been cancelled. 
 			Please try again with a new Payment Code`,
 		},
-		"FPRA99": &ResponseCode{
+		"FPRA99": {
 			TxnStatus:       StatusDeclined,
-			LogMessage:      "DECLINED by Oxipay Gateway",
-			CustomerMessage: "Transaction has been declined by the Oxipay Gateway",
+			LogMessage:      "DECLINED by the Humm Gateway",
+			CustomerMessage: "Transaction has been declined by the Humm Gateway",
 		},
-		"EVAL02": &ResponseCode{
+		"EVAL02": {
 			TxnStatus:  StatusFailed,
 			LogMessage: "Request is invalid",
-			CustomerMessage: `The request to Oxipay was invalid. 
+			CustomerMessage: `The request to Gateway was invalid. 
 			You can try again with a different Payment Code. 
-			Please contact pit@oxipay.com.au for further support`,
+			Please contact pit@shophumm.com.au for further support`,
 		},
-		"ESIG01": &ResponseCode{
+		"ESIG01": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
-			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+			CustomerMessage: `Please contact pit@shophumm.com.au for further support`,
 		},
-		"EISE01": &ResponseCode{
+		"EISE01": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Server Error",
-			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+			CustomerMessage: `Please contact pit@shophumm.com.au for further support`,
 		},
 	}
 
@@ -456,79 +457,79 @@ func ProcessAuthorisationResponses() func(string) *ResponseCode {
 func ProcessSalesAdjustmentResponse() func(string) *ResponseCode {
 
 	innerMap := map[string]*ResponseCode{
-		"SPSA01": &ResponseCode{
+		"SPSA01": {
 			TxnStatus:       StatusApproved,
 			LogMessage:      "APPROVED",
 			CustomerMessage: "APPROVED",
 		},
-		"FPSA01": &ResponseCode{
+		"FPSA01": {
 			TxnStatus:       StatusDeclined,
 			LogMessage:      "Unable to find the specified POS transaction reference",
 			CustomerMessage: "Unable to find the specified POS transaction reference",
 		},
-		"FPSA02": &ResponseCode{
+		"FPSA02": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "This contract has already been completed",
 			CustomerMessage: "This contract has already been completed",
 		},
-		"FPSA03": &ResponseCode{
+		"FPSA03": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "This Oxipay contract has previously been cancelled and all payments collected have been refunded to the customer",
 			CustomerMessage: "This Oxipay contract has previously been cancelled and all payments collected have been refunded to the customer",
 		},
-		"FPSA04": &ResponseCode{
+		"FPSA04": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed for this amount",
 			CustomerMessage: "Sales adjustment cannot be processed for this amount",
 		},
-		"FPSA05": &ResponseCode{
+		"FPSA05": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Unable to process a sales adjustment for this contract. Please contact Merchant Services during business hours for further information",
 			CustomerMessage: "Unable to process a sales adjustment for this contract. Please contact Merchant Services during business hours for further information",
 		},
-		"FPSA06": &ResponseCode{
+		"FPSA06": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed. Please call Oxipay Collections",
 			CustomerMessage: "Sales adjustment cannot be processed. Please call Oxipay Collections",
 		},
-		"FPSA07": &ResponseCode{
+		"FPSA07": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed at this store",
 			CustomerMessage: "Sales adjustment cannot be processed at this store",
 		},
-		"FPSA08": &ResponseCode{
+		"FPSA08": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Sales adjustment cannot be processed for this transaction. Duplicate receipt number found.",
 			CustomerMessage: "Sales adjustment cannot be processed for this transaction. Duplicate receipt number found.",
 		},
-		"FPSA09": &ResponseCode{
+		"FPSA09": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Amount must be greater than 0.",
 			CustomerMessage: "Amount must be greater than 0.",
 		},
-		"EAUT01": &ResponseCode{
+		"EAUT01": {
 			TxnStatus:  StatusFailed,
 			LogMessage: "Authentication to gateway error",
-			CustomerMessage: `The request to Oxipay was not what we were expecting. 
+			CustomerMessage: `The request to Humm was not what we were expecting. 
 			You can try again with a different Payment Code. 
-			Please contact pit@oxipay.com.au for further support`,
+			Please contact pit@shophumm.com.au for further support`,
 		},
-		"EVAL01": &ResponseCode{
+		"EVAL01": {
 			TxnStatus:  StatusFailed,
 			LogMessage: "Request is invalid",
-			CustomerMessage: `The request to Oxipay was what we were expecting. 
+			CustomerMessage: `The request to Humm was what we were expecting. 
 			You can try again with a different Payment Code. 
-			Please contact pit@oxipay.com.au for further support`,
+			Please contact pit@shophumm.com.au for further support`,
 		},
-		"ESIG01": &ResponseCode{
+		"ESIG01": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Signature mismatch error. Has the terminal changed, try removing the key for the device? ",
-			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+			CustomerMessage: `Please contact pit@shophumm.com.au for further support`,
 		},
-		"EISE01": &ResponseCode{
+		"EISE01": {
 			TxnStatus:       StatusFailed,
 			LogMessage:      "Server Error",
-			CustomerMessage: `Please contact pit@oxipay.com.au for further support`,
+			CustomerMessage: `Please contact pit@shophumm.com.au for further support`,
 		},
 	}
 

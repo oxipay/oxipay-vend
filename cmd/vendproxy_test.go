@@ -36,8 +36,6 @@ func TestMain(m *testing.M) {
 	// add vars to the seesion to simulate a redirect
 	DbSessionStore = initSessionStore(Db, appConfig.Session)
 
-	terminal.Db = Db
-
 	// oxipay.GatewayURL = "https://testpos.oxipay.com.au/webapi/v1/Test"
 
 	returnCode := m.Run()
@@ -50,14 +48,15 @@ func TestTerminalSave(t *testing.T) {
 	// { Success SCRK01 Success VK5NGgc7nFJp 481f1e4098465f5229b33d91e0687c6123b91078e5c727b6d8ebf9360af145e7}
 	var uniqueID, _ = shortid.Generate()
 
-	terminal := &terminal.Terminal{
-		FxlDeviceSigningKey: "VK5NGgc7nFJp",
-		FxlRegisterID:       "Oxipos",
-		FxlSellerID:         "30188105",
-		Origin:              "http://pos.example.com",
-		VendRegisterID:      uniqueID,
-	}
-	saved, err := terminal.Save("unit-test")
+	register := terminal.NewRegister(
+		"VK5NGgc7nFJp",
+		"HummPos",
+		"30188105",
+		"http://pos.oxipay.com.au",
+		uniqueID,
+	)
+	term := terminal.NewTerminal(Db)
+	saved, err := term.Save("unit-test", register)
 
 	if err != nil || saved == false {
 		t.Fatal(err)
@@ -68,16 +67,19 @@ func TestTerminalSave(t *testing.T) {
 func TestTerminalUniqueSave(t *testing.T) {
 	// { Success SCRK01 Success VK5NGgc7nFJp 481f1e4098465f5229b33d91e0687c6123b91078e5c727b6d8ebf9360af145e7}
 
-	terminal := &terminal.Terminal{
-		FxlDeviceSigningKey: "VK5NGgc7nFJp",
-		FxlRegisterID:       "Oxipos",
-		FxlSellerID:         "30188105",
-		Origin:              "http://pos.oxipay.com.au",
-		VendRegisterID:      "0d33b6af-7d33-4913-a310-7cd187ad4756",
-	}
+	register := terminal.NewRegister(
+		"myRegister",
+		"VK5NGgc7nFJp",
+		"30188105",
+		"http://pos.oxipay.com.au",
+		"0d33b6af-7d33-4913-a310-7cd187ad4756",
+	)
+
+	term := terminal.NewTerminal(Db)
+
 	// insert the same record twice so that we know it's erroring
-	saved, err := terminal.Save("unit-test")
-	saved, err = terminal.Save("unit-test")
+	saved, err := term.Save("unit-test", register)
+	saved, err = term.Save("unit-test", register)
 
 	if err != nil && saved != false {
 		t.Fatal(err)
@@ -138,17 +140,19 @@ func TestProcessAuthorisationHandler(t *testing.T) {
 
 	var uniqueID, _ = uuid.NewV4()
 	log.Printf("Generated RegisterID of %s \n", uniqueID)
-	terminal := &terminal.Terminal{
-		FxlDeviceSigningKey: "1234567890", // use hardcoded signing key for dummy endpoint
-		FxlRegisterID:       "Oxipos",
-		FxlSellerID:         "30188105",
-		Origin:              "http://pos.example.com",
-		VendRegisterID:      uniqueID.String(),
-	}
+	register := terminal.NewRegister(
+		"1234567890", // use hardcoded signing key for dummy endpoint
+		"Oxipos",
+		"30188105",
+		"http://pos.example.com",
+		uniqueID.String(),
+	)
+
+	term := terminal.NewTerminal(Db)
 
 	// we do this to ensure that it's registered already,
 	// otherwise we are going to get a 302
-	saved, err := terminal.Save("unit-test")
+	saved, err := term.Save("unit-test", register)
 	if saved != true {
 		t.Error("Unable to save register")
 		return
@@ -295,19 +299,16 @@ func TestProcessSalesAdjustmentHandler(t *testing.T) {
 
 func TestProcessAuthorisationResponse(t *testing.T) {
 
-	terminal, err := terminal.GetRegisteredTerminal("https://amtest.vendhq.com", "0afa8de1-1442-11e8-edec-94863fd13a3c")
-	if err != nil {
-		t.Error(err)
-	}
+	terminal := terminal.NewRegister("https://amtest.vendhq.com", "0afa8de1-1442-11e8-edec-94863fd13a3c", "95KBRhJzdrNu", "test-register", "c34a5316-2f9c-49ed-8802-1ff3fa1d306c")
 
 	reponse := `{"x_purchase_number":"52011913","x_status":"Success","x_code":"SPRA01","x_message":"Approved","signature":"3b715be8fdd67decd299cbb14ceeec3c76667d48e3468e4d3f343602d9b7d690","tracking_data":null}`
 
-	oxipayResponse := new(oxipay.OxipayResponse)
-	err = json.Unmarshal([]byte(reponse), oxipayResponse)
+	oxipayResponse := new(oxipay.Response)
+	err := json.Unmarshal([]byte(reponse), oxipayResponse)
 	if err != nil {
 		t.Error(err)
 	}
-	isValid := oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey)
+	isValid, err := oxipayResponse.Authenticate(terminal.FxlDeviceSigningKey)
 
 	if isValid == false {
 		t.Error("Not a valid request")
@@ -329,12 +330,12 @@ func TestRegistrationResponse(t *testing.T) {
 		"tracking_data": null
 	 }`
 
-	oxipayResponse := new(oxipay.OxipayResponse)
+	oxipayResponse := new(oxipay.Response)
 	err := json.Unmarshal([]byte(rawResponse), oxipayResponse)
 	if err != nil {
 		t.Error(err)
 	}
-	isValid := oxipayResponse.Authenticate("Voh4ig3eepeedai8")
+	isValid, err := oxipayResponse.Authenticate("Voh4ig3eepeedai8")
 
 	if isValid == false {
 		t.Error("Not a valid request")
@@ -350,7 +351,7 @@ func TestRegistrationResponse(t *testing.T) {
 func TestGeneratePayload(t *testing.T) {
 
 	log.Print("hello")
-	oxipayPayload := oxipay.OxipayPayload{
+	oxipayPayload := oxipay.AuthorisationPayload{
 		DeviceID:        "foobar",
 		MerchantID:      "3342342",
 		FinanceAmount:   "1000",

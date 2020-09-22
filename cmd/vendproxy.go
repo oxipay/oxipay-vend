@@ -55,7 +55,7 @@ type Response struct {
 // DbSessionStore is the database session storage manager
 var DbSessionStore *mysqlstore.MySQLStore
 
-var log *logrus.Logger
+var logger *logrus.Logger
 
 // var appConfig *config.HostConfig
 
@@ -85,9 +85,9 @@ func main() {
 		logrus.Fatalf("Level %s is not a valid log level. Try setting 'info' in production ", level)
 	}
 
-	log = initLogger(level)
+	logger = initLogger(level)
 	if err != nil {
-		log.Fatalf("Configuration Error: %s ", err)
+		logger.Fatalf("Configuration Error: %s ", err)
 	}
 
 	db = connectToDatabase(appConfig.Database)
@@ -98,7 +98,7 @@ func main() {
 	oxipayClient = oxipay.NewOxipay(
 		appConfig.Oxipay.GatewayURL,
 		appConfig.Oxipay.Version,
-		log,
+		logger,
 	)
 
 	term = terminal.NewTerminal(db)
@@ -115,10 +115,10 @@ func main() {
 	// The default port is 500, but one can be specified as an env var if needed.
 	port := appConfig.Webserver.Port
 
-	log.Infof("Starting webserver on port %s \n", port)
+	logger.Infof("Starting webserver on port %s \n", port)
 
 	//defer sessionStore.Close()
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	logger.Fatal(http.ListenAndServe(":"+port, nil))
 
 	// @todo handle shutdowns
 }
@@ -141,7 +141,7 @@ func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstor
 	// @todo support multiple keys from the config so that key rotation is possible
 	store, err := mysqlstore.NewMySQLStoreFromConnection(db, "sessions", "/", 3600, []byte(sessionConfig.Secret))
 	if err != nil {
-		log.Warn(err)
+		logger.Warn(err)
 	}
 
 	store.Options = &sessions.Options{
@@ -166,7 +166,7 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 		params.Timeout,
 	)
 
-	log.Infof("Attempting to connect to database %s\n", dsn)
+	logger.Infof("Attempting to connect to database %s\n", dsn)
 
 	// connect to the database
 	// @todo grab config
@@ -174,27 +174,27 @@ func connectToDatabase(params config.DbConnection) *sql.DB {
 	db, err := sql.Open("mysql", dsn)
 
 	if err != nil {
-		log.Error("Unable to connect")
-		log.Fatal(err)
+		logger.Error("Unable to connect")
+		logger.Fatal(err)
 	}
 
 	err = retry(30, time.Duration(10), db.Ping)
 
 	// test to make sure it's all good
 	if err != nil {
-		log.Errorf("Unable to connect to database: %s on %s", params.Name, params.Host)
-		log.Warn(err)
+		logger.Errorf("Unable to connect to database: %s on %s", params.Name, params.Host)
+		logger.Warn(err)
 	}
 
-	log.Info("Database Connected")
+	logger.Info("Database Connected")
 
 	return db
 }
 
 func retry(attempts int, sleep time.Duration, f func() error) error {
-	log.Info("Attempting DB connection")
+	logger.Info("Attempting DB connection")
 	if err := f(); err != nil {
-		log.Warn(err)
+		logger.Warn(err)
 		if attempts--; attempts > 0 {
 
 			jitter := time.Duration(rand.Int63n(int64(sleep)))
@@ -202,7 +202,7 @@ func retry(attempts int, sleep time.Duration, f func() error) error {
 
 			time.Sleep(sleep)
 
-			log.Warning("Unsuccessful Retrying")
+			logger.Warning("Unsuccessful Retrying")
 			return retry(attempts, 2*sleep, f)
 		}
 		return err
@@ -218,7 +218,7 @@ func getPaymentRequestFromSession(r *http.Request) (*vend.PaymentRequest, error)
 	vendPaymentRequest := &vend.PaymentRequest{}
 	session, err = getSession(r, "oxipay")
 	if err != nil {
-		log.Println(err.Error())
+		logger.Infoln(err.Error())
 		_ = session
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func getPaymentRequestFromSession(r *http.Request) (*vend.PaymentRequest, error)
 
 func getSession(r *http.Request, sessionName string) (*sessions.Session, error) {
 	if DbSessionStore == nil {
-		log.Error("Can't get session store")
+		logger.Error("Can't get session store")
 		return nil, errors.New("Can't get session store")
 	}
 
@@ -282,7 +282,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 			response, err := oxipayClient.RegisterPosDevice(registrationPayload)
 
 			if err != nil {
-				log.Error(err)
+				logger.Error(err)
 				browserResponse.Message = "We are unable to process this request "
 				browserResponse.HTTPStatus = http.StatusBadGateway
 			}
@@ -296,7 +296,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				// process the response
 				browserResponse = processOxipayResponse(response, oxipay.Registration, "")
 				if browserResponse.Status == statusAccepted {
-					log.Info("Device Successfully Registered in Oxipay")
+					logger.Info("Device Successfully Registered in Oxipay")
 
 					register := terminal.NewRegister(
 						response.Key,
@@ -308,7 +308,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 					_, err := term.Save("vend-proxy", register)
 					if err != nil {
-						log.Error(err)
+						logger.Error(err)
 						browserResponse.Message = "Unable to process request"
 						browserResponse.HTTPStatus = http.StatusServiceUnavailable
 
@@ -318,7 +318,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
-			log.Error(err.Error())
+			logger.Error(err.Error())
 			browserResponse.Message = "Sorry. We are unable to process this registration. Please contact support"
 			browserResponse.HTTPStatus = http.StatusBadRequest
 		}
@@ -327,7 +327,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		browserResponse.file = "../assets/templates/register.html"
 	}
 
-	log.Print(browserResponse.Message)
+	logger.Print(browserResponse.Message)
 	sendResponse(w, r, browserResponse)
 	return
 }
@@ -361,7 +361,7 @@ func processOxipayResponse(oxipayResponse *oxipay.Response, responseType oxipay.
 
 	switch oxipayResponseCode.TxnStatus {
 	case oxipay.StatusApproved:
-		log.Infof("Status: %f", oxipayResponseCode.LogMessage)
+		logger.Infof("Status: %f", oxipayResponseCode.LogMessage)
 		response.Amount = amount
 		response.ID = oxipayResponse.PurchaseNumber
 		response.Status = statusAccepted
@@ -390,7 +390,7 @@ func processOxipayResponse(oxipayResponse *oxipay.Response, responseType oxipay.
 func bindToRegistrationPayload(r *http.Request) (*oxipay.RegistrationPayload, error) {
 
 	if err := r.ParseForm(); err != nil {
-		log.Errorf("Unable to bind registration payload: %s", err)
+		logger.Errorf("Unable to bind registration payload: %s", err)
 		return nil, err
 	}
 	uniqueID, _ := shortid.Generate()
@@ -412,7 +412,7 @@ func bindToRegistrationPayload(r *http.Request) (*oxipay.RegistrationPayload, er
 
 func logRequest(r *http.Request) {
 	dump, _ := httputil.DumpRequest(r, true)
-	log.Debugf("%q ", dump)
+	logger.Debugf("%q ", dump)
 	// if r.Body != nil {
 	// 	// we need to copy the bytes out of the buffer
 	// 	// we we can inspect the contents without draining the buffer
@@ -422,7 +422,7 @@ func logRequest(r *http.Request) {
 	// }
 	if r.RequestURI != "" {
 		query := r.RequestURI
-		log.Debugf("Query  %s", query)
+		logger.Debugf("Query  %s", query)
 	}
 
 }
@@ -435,7 +435,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if err := r.ParseForm(); err != nil {
-		log.Errorf("Index error parsing form: %s", err)
+		logger.Errorf("Index error parsing form: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -449,7 +449,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		RegisterID: r.Form.Get("register_id"),
 	}
 
-	log.Debugf("Received %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
+	logger.Debugf("Received %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
 	vReq, err = validPaymentRequest(vReq)
 
 	if err != nil {
@@ -486,16 +486,16 @@ func saveToSession(w http.ResponseWriter, r *http.Request, vReq *vend.PaymentReq
 
 	session, err := getSession(r, "oxipay")
 	if err != nil {
-		log.Error(err)
+		logger.Error(err)
 	}
 
 	session.Values["vReq"] = vReq
 	err = sessions.Save(r, w)
 
 	if err != nil {
-		log.Error(err)
+		logger.Error(err)
 	}
-	log.Infof("Session initiated: %s ", session.ID)
+	logger.Infof("Session initiated: %s ", session.ID)
 }
 
 func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
@@ -511,7 +511,7 @@ func bindToPaymentPayload(r *http.Request) (*vend.PaymentRequest, error) {
 		Code:       strings.Trim(r.Form.Get("paymentcode"), ""),
 	}
 
-	log.Debugf("Payment: %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
+	logger.Debugf("Payment: %s from %s for register %s", vReq.Amount, vReq.Origin, vReq.RegisterID)
 	vReq, err := validPaymentRequest(vReq)
 
 	return vReq, err
@@ -524,7 +524,7 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 		"module": "proxy",
 		"call":   "RefundHandler",
 	}
-	cxLog := log.WithFields(cxFields)
+	cxLog := logger.WithFields(cxFields)
 
 	// create the default response so that we always have something to send to the browser
 	browserResponse := new(Response)
@@ -573,18 +573,18 @@ func RefundHandler(w http.ResponseWriter, r *http.Request) {
 
 	// generate the plaintext for the signature
 	plainText := oxipay.GeneratePlainTextSignature(oxipayPayload)
-	log.Infof("Oxipay plain text: %s \n", plainText)
+	logger.Infof("Humm plain text: %s \n", plainText)
 
 	// sign the message
 	oxipayPayload.Signature = oxipay.SignMessage(plainText, register.FxlDeviceSigningKey)
-	log.Infof("Oxipay signature: %s \n", oxipayPayload.Signature)
+	logger.Infof("Humm signature: %s \n", oxipayPayload.Signature)
 
 	// send authorisation to oxipay
 	oxipayResponse, err := oxipayClient.ProcessSalesAdjustment(oxipayPayload)
 
 	if err != nil {
 		// log the raw response
-		log.Errorf("Error Processing: %s", oxipayResponse)
+		logger.Errorf("Error Processing: %s", oxipayResponse)
 		return
 	}
 
@@ -616,7 +616,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	vReq, err = bindToPaymentPayload(r)
 	if err != nil {
-		log.Error(err)
+		logger.Error(err)
 		http.Error(w, "There was a problem processing the request", http.StatusBadRequest)
 	}
 
@@ -630,7 +630,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
-	log.Infof("Processing Payment using Oxipay register %s ", terminal.FxlRegisterID)
+	logger.Infof("Processing Payment using Oxipay register %s ", terminal.FxlRegisterID)
 
 	// send off to Oxipay
 	//var oxipayPayload
@@ -647,11 +647,11 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	// generate the plaintext for the signature
 	plainText := oxipay.GeneratePlainTextSignature(oxipayPayload)
-	log.Debugf("Oxipay plain text: %s \n", plainText)
+	logger.Debugf("Humm plain text: %s \n", plainText)
 
 	// sign the message
 	oxipayPayload.Signature = oxipay.SignMessage(plainText, terminal.FxlDeviceSigningKey)
-	log.Debugf("Oxipay signature: %s \n", oxipayPayload.Signature)
+	logger.Debugf("Humm signature: %s \n", oxipayPayload.Signature)
 
 	// send authorisation to the Oxipay POS API
 	oxipayResponse, err := oxipayClient.ProcessAuthorisation(oxipayPayload)
@@ -661,7 +661,7 @@ func PaymentHandler(w http.ResponseWriter, r *http.Request) {
 		// log the raw response
 
 		msg := fmt.Sprintf("Error Processing: %s", oxipayResponse)
-		log.Error(msg)
+		logger.Error(msg)
 		return
 	}
 
@@ -689,9 +689,9 @@ func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 		w.Header().Set("Expires", "0")
 		absFile, err := filepath.Abs(response.file)
 		if err != nil {
-			log.Warnf("Unable to find file %s: %e", response.file, err)
+			logger.Warnf("Unable to find file %s: %e", response.file, err)
 		} else {
-			log.Infof("Serving file : %s ", absFile)
+			logger.Infof("Serving file : %s ", absFile)
 		}
 
 		http.ServeFile(w, r, response.file)
@@ -702,12 +702,12 @@ func sendResponse(w http.ResponseWriter, r *http.Request, response *Response) {
 	// Marshal our response into JSON.
 	responseJSON, err := json.Marshal(response)
 	if err != nil {
-		log.Errorf("Failed to marshal response json: %s ", err)
+		logger.Errorf("Failed to marshal response json: %s ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	log.Debugf("Sending Response: %s \n to the browser \n", responseJSON)
+	logger.Debugf("Sending Response: %s \n to the browser \n", responseJSON)
 
 	if response.HTTPStatus == 0 {
 		response.HTTPStatus = http.StatusInternalServerError
