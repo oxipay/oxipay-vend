@@ -1,7 +1,7 @@
 ### BUILD
 
 FROM ubuntu:latest as build-environment
-
+ENV DEBIAN_FRONTEND=noninteractive
 ENV CGO_ENABLED 0 
 ARG BUILD_HOME_DIR="/root"
 ARG PKG_BASE="${BUILD_HOME_DIR}/go/src/github.com/oxipay/"
@@ -15,20 +15,23 @@ RUN apt-get update && apt-get install -y ssl-cert ca-certificates golang-glide g
 RUN mkdir -p ${PKG_BASE}
 
 WORKDIR ${PKG_BASE} 
-RUN git clone https://github.com/oxipay/oxipay-vend.git
+RUN git clone https://github.com/oxipay/oxipay-vend.git 
+WORKDIR ./oxipay-vend
+RUN git checkout humm-nz
 
 WORKDIR ${BUILD_HOME_DIR}/go/src/github.com/oxipay/oxipay-vend/
-RUN glide up && go build ./cmd/vendproxy.go
-
+RUN go build ./cmd/vendproxy.go
 
 
 ### PROD
-FROM ubuntu:latest as vendproxy
+FROM ubuntu:latest as final
 
 ARG USER="vendproxy"
 ARG BASE_DIR="/srv/www"
 ARG HOME_DIR="${BASE_DIR}/${USER}" 
 ARG BUILD_HOME_DIR="/root"
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME_DIR=${HOME_DIR}
 
 RUN mkdir -p ${BASE_DIR}
 RUN useradd -mb ${BASE_DIR} -s /bin/bash ${USER}
@@ -51,6 +54,7 @@ CMD ["./vendproxy"]
 
 ### PROD NGINX
 FROM ubuntu:latest as nginx
+ENV DEBIAN_FRONTEND=noninteractive
 
 ARG USER="vendproxy"
 ARG BASE_DIR="/srv/www"
