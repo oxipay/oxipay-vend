@@ -53,7 +53,7 @@ func ReadApplicationConfig(configFile string) (*HostConfig, error) {
 	conf.SetConfigName("vendproxy")
 	//conf.Set("Verbose", true)
 
-	conf.AddConfigPath("/etc/vend/")
+	conf.AddConfigPath("/etc/vendproxy/")
 	conf.AddConfigPath("../configs/")
 	conf.AddConfigPath("./")
 
