@@ -8,6 +8,8 @@ import (
 type WebserverConfig struct {
 	Port    string `json:"port"`
 	Address string `json:"address"`
+	TLSCert string `json:"tlscert"`
+	TLSKey  string `json:"tlskey"`
 }
 
 // SessionConfig configuration for the session
@@ -81,23 +83,3 @@ func ReadApplicationConfig(configFile string) (*HostConfig, error) {
 
 	return hostConfiguration, err
 }
-
-// Validate ensure we have some basic validation of the configuration
-// func validate(myconfig viper.Viper) []error {
-// 	required := [3]string{"webserver", "database", "session"}
-// 	var errs []error
-
-// 	// We need to do more error checking here but let's at least make an
-// 	// attempt
-// 	for _, entry := range required {
-// 		var tmpMap map[string]string
-// 		configValue := myconfig.Get(entry).StringMap(tmpMap)
-// 		if configValue == nil {
-// 			newErr := fmt.Errorf("Config is missing a definition for %s", entry)
-// 			errs = append(errs, newErr)
-// 		}
-// 	}
-
-// 	// check the ensure the log level works
-// 	return errs
-// }
