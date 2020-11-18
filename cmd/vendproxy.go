@@ -113,12 +113,16 @@ func main() {
 	http.HandleFunc("/refund", RefundHandler)
 
 	// The default port is 500, but one can be specified as an env var if needed.
-	port := appConfig.Webserver.Port
+	wsConfig := appConfig.Webserver
 
-	logger.Infof("Starting webserver on port %s \n", port)
+	logger.Infof("Starting webserver on port %s \n", wsConfig.Port)
 
-	//defer sessionStore.Close()
-	logger.Fatal(http.ListenAndServe(":"+port, nil))
+	if len(wsConfig.TLSCert) > 0 && len(wsConfig.TLSKey) > 0 {
+		logger.Fatal(http.ListenAndServeTLS(":"+wsConfig.Port, wsConfig.TLSCert, wsConfig.TLSKey, nil))
+	} else {
+		// start up an http listener
+		logger.Fatal(http.ListenAndServe(":"+wsConfig.Port, nil))
+	}
 
 	// @todo handle shutdowns
 }
@@ -149,6 +153,8 @@ func initSessionStore(db *sql.DB, sessionConfig config.SessionConfig) *mysqlstor
 		Path:     sessionConfig.Path,
 		MaxAge:   sessionConfig.MaxAge,   // 8 hours
 		HttpOnly: sessionConfig.HTTPOnly, // disable for this demo
+		Secure:   true,
+		SameSite: 4,
 	}
 
 	// register the type VendPaymentRequest so that we can use it later in the session
@@ -485,6 +491,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 func saveToSession(w http.ResponseWriter, r *http.Request, vReq *vend.PaymentRequest) {
 
 	session, err := getSession(r, "oxipay")
+	session.Options.SameSite = 4
 	if err != nil {
 		logger.Error(err)
 	}
