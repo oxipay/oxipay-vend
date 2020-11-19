@@ -1,17 +1,19 @@
 {
     "webserver": {
-        "port": "5000",
-        "address": "127.0.0.1"
+        "port": "2346",
+        "address": "127.0.0.1",
+        "tlscert": "../configs/ssl/ssl-cert-snakeoil.pem",
+        "tlskey": "../configs/ssl/ssl-cert-snakeoil.key"
     },
     "database": {
         "username": "vend",
-		"password": "",
-		"host":     "127.0.0.1",
+        "password": "__",
+	    "host":     "127.0.0.1",
 		"name":     "vend",
 		"timeout":  "20s"
     }, 
     "session": {
-        "domain":   "", 
+        "domain":   "vend.shophumm.co.nz", 
 		"path":     "/",
 		"maxage":   3600,
         "httponly": true,
