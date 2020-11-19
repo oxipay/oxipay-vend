@@ -51,12 +51,12 @@ type OxipayConfig struct {
 func ReadApplicationConfig(configFile string) (*HostConfig, error) {
 	conf := viper.New()
 	conf.SetConfigName("vendproxy")
-	//conf.Set("Verbose", true)
+	conf.Set("Verbose", true)
 
 	conf.AddConfigPath("/etc/vendproxy/")
 	conf.AddConfigPath("../configs/")
 	conf.AddConfigPath("./")
-
+	conf.AllowEmptyEnv(true)
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()
