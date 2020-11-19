@@ -65,6 +65,12 @@ func ReadApplicationConfig(configFile string) (*HostConfig, error) {
 		return nil, err
 	}
 
+	// workaround because viper does not treat env vars the same as other config
+	for _, key := range conf.AllKeys() {
+		val := conf.Get(key)
+		conf.Set(key, val)
+	}
+
 	hostConfiguration := &HostConfig{}
 
 	if err != nil {
