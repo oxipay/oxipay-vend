@@ -1,6 +1,9 @@
 package config
 
 import (
+	"log"
+	"os"
+
 	"github.com/spf13/viper"
 )
 
@@ -49,14 +52,17 @@ type OxipayConfig struct {
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
 func ReadApplicationConfig(configFile string) (*HostConfig, error) {
-	conf := viper.New()
+	// conf := viper.New()
+	conf := viper.NewWithOptions(viper.KeyDelimiter("_"))
+
 	conf.SetConfigName("vendproxy")
-	conf.Set("Verbose", true)
+	viper.SetConfigType("json")
+	//conf.Set("Verbose", true)
 
 	conf.AddConfigPath("/etc/vendproxy/")
 	conf.AddConfigPath("../configs/")
 	conf.AddConfigPath("./")
-	conf.AllowEmptyEnv(true)
+	conf.AllowEmptyEnv(false)
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()
@@ -72,16 +78,19 @@ func ReadApplicationConfig(configFile string) (*HostConfig, error) {
 	}
 
 	hostConfiguration := &HostConfig{}
-
 	if err != nil {
 		return hostConfiguration, err
 	}
 
-	// errs := validate(conf)
-	// if len(errs) > 0 {
-	// 	return hostConfiguration, errs[0]
-	// }
-	err = conf.Unmarshal(hostConfiguration)
+	err = conf.UnmarshalExact(hostConfiguration)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	// log.Printf("Databasae %s", conf.GetString("database_host"))
+	if hostConfiguration.LogLevel == "config" {
+		conf.Debug()
+		os.Exit(0)
+	}
 
 	// hardcode this for now
 	// should load from a non-config file
