@@ -2,28 +2,27 @@
     "webserver": {
         "port": "2346",
         "address": "127.0.0.1",
-        "tlscert": "../configs/ssl/ssl-cert-snakeoil.pem",
-        "tlskey": "../configs/ssl/ssl-cert-snakeoil.key"
+        "tlscert": "",
+        "tlskey": ""
     },
     "database": {
         "username": "vend",
         "password": "__",
-	    "host":     "127.0.0.1",
-		"name":     "vend",
-		"timeout":  "20s"
-    }, 
+        "host": "127.0.0.1",
+        "name": "vend",
+        "timeout": "20s"
+    },
     "session": {
-        "domain":   "vend.shophumm.co.nz", 
-		"path":     "/",
-		"maxage":   3600,
+        "domain": "vend.shophumm.co.nz",
+        "path": "/",
+        "maxage": 3600,
         "httponly": true,
         "secret": "SxXcr8n9xFzsfUowQsyMUaou"
     },
     "loglevel": "debug",
     "background": true,
     "oxipay": {
-        "gatewayurl": "https://integration-pos.shophumm.co.nz/webapi/v1/"
-        
-
+        "gatewayurl": "https://integration-pos.shophumm.co.nz/webapi/v1/",
+        "version": "1.1.1"
     }
 }
